@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sabaudi Bet — Scommesse Vacanza</title>
+<style>
+  :root{
+    --sand:#FDF6E9;
+    --sea:#0B7285;
+    --sea-dark:#0A5C6B;
+    --coral:#FF6B4A;
+    --coral-dark:#E5502F;
+    --sun:#FFC93C;
+    --navy:#123047;
+    --card:#FFFFFF;
+    --border:#E7DCC4;
+    --muted:#6E7B85;
+    --radius:18px;
+    --font: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:var(--font);
+    background:
+      radial-gradient(ellipse 900px 500px at 10% -10%, #FFE8A3 0%, transparent 60%),
+      radial-gradient(ellipse 900px 600px at 110% 0%, #BEEBEF 0%, transparent 55%),
+      var(--sand);
+    color:var(--navy);
+    min-height:100vh;
+    padding-bottom:80px;
+  }
+  .wrap{max-width:820px;margin:0 auto;padding:28px 18px 40px;}
+
+  header.top{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:24px;
+  }
+  .brand{display:flex;align-items:center;gap:12px;}
+  .brand .logo{
+    width:52px;height:52px;border-radius:16px;
+    background:linear-gradient(135deg,var(--coral),var(--sun));
+    display:flex;align-items:center;justify-content:center;
+    font-size:26px;
+    transform:rotate(-6deg);
+    box-shadow:0 6px 16px rgba(255,107,74,0.35);
+  }
+  .brand h1{font-size:22px;margin:0;font-weight:800;letter-spacing:-0.02em;}
+  .brand p{margin:0;font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:0.08em;}
+
+  .userbox{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:8px 14px;
+    display:flex;
+    align-items:center;
+    gap:10px;
+    box-shadow:0 4px 12px rgba(18,48,71,0.06);
+  }
+  .userbox .name{font-weight:700;font-size:14px;}
+  .userbox .balance{
+    background:var(--sea);
+    color:white;
+    font-weight:800;
+    font-size:13px;
+    padding:4px 10px;
+    border-radius:999px;
+  }
+  .userbox button{
+    border:none;background:none;color:var(--muted);
+    font-size:11px;text-decoration:underline;cursor:pointer;
+    font-family:var(--font);
+  }
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:var(--radius);
+    padding:22px;
+    box-shadow:0 6px 20px rgba(18,48,71,0.06);
+  }
+
+  /* LOGIN */
+  .login-card{max-width:420px;margin:60px auto 0;text-align:center;}
+  .login-card h2{font-size:20px;margin:0 0 6px;}
+  .login-card p{color:var(--muted);font-size:14px;margin:0 0 20px;}
+  .login-row{display:flex;gap:8px;}
+  input[type="text"], input[type="number"], input[type="password"]{
+    font-family:var(--font);
+    border:1.5px solid var(--border);
+    border-radius:10px;
+    padding:11px 13px;
+    font-size:15px;
+    width:100%;
+    outline:none;
+    transition:border-color 120ms ease, box-shadow 120ms ease;
+    background:#FFFDF8;
+    color:var(--navy);
+  }
+  input:focus{border-color:var(--sea);box-shadow:0 0 0 3px rgba(11,114,133,0.15);}
+  .btn{
+    font-family:var(--font);
+    border:none;
+    border-radius:10px;
+    padding:11px 18px;
+    font-weight:700;
+    font-size:14px;
+    cursor:pointer;
+    transition:transform 100ms ease, box-shadow 120ms ease, background 120ms ease;
+    white-space:nowrap;
+  }
+  .btn:active{transform:scale(0.97);}
+  .btn-primary{background:var(--coral);color:white;box-shadow:0 4px 12px rgba(255,107,74,0.35);}
+  .btn-primary:hover{background:var(--coral-dark);}
+  .btn-sea{background:var(--sea);color:white;}
+  .btn-sea:hover{background:var(--sea-dark);}
+  .btn-ghost{background:transparent;color:var(--sea);border:1.5px solid var(--sea);}
+  .btn-ghost:hover{background:rgba(11,114,133,0.08);}
+  .btn-small{padding:7px 12px;font-size:12px;}
+  .btn:disabled{opacity:0.45;cursor:not-allowed;transform:none;}
+
+  /* TABS */
+  .tabs{display:flex;gap:6px;margin-bottom:20px;background:#F1E8D2;padding:5px;border-radius:12px;}
+  .tab{
+    flex:1;text-align:center;padding:9px 6px;border-radius:9px;
+    font-weight:700;font-size:13px;cursor:pointer;color:var(--muted);
+    transition:background 120ms ease, color 120ms ease;
+  }
+  .tab.active{background:var(--navy);color:white;}
+
+  /* EVENT CARDS */
+  .event{
+    display:flex;gap:14px;align-items:flex-start;
+    padding:16px;border:1px solid var(--border);border-radius:14px;
+    margin-bottom:12px;background:#FFFDF8;
+  }
+  .event .emoji{font-size:28px;width:40px;text-align:center;flex-shrink:0;padding-top:4px;}
+  .event .body{flex:1;min-width:0;}
+  .event .desc{font-weight:700;font-size:15px;margin:0 0 6px;line-height:1.3;}
+  .event .meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;}
+  .quota{
+    background:var(--sun);color:var(--navy);font-weight:800;font-size:12px;
+    padding:3px 10px;border-radius:999px;
+  }
+  .status{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;padding:3px 9px;border-radius:999px;}
+  .status.aperta{background:#DCEEF0;color:var(--sea-dark);}
+  .status.vinta{background:#D4EDDA;color:#155724;}
+  .status.persa{background:#F8D7DA;color:#8a1f2b;}
+  .bet-row{display:flex;gap:8px;align-items:center;}
+  .bet-row input{max-width:120px;}
+  .my-bet{font-size:12px;color:var(--muted);margin-top:6px;}
+  .my-bet b{color:var(--navy);}
+
+  /* LEADERBOARD */
+  .lb-row{
+    display:flex;align-items:center;gap:12px;padding:11px 4px;
+    border-bottom:1px solid var(--border);
+  }
+  .lb-row:last-child{border-bottom:none;}
+  .lb-rank{font-weight:800;color:var(--muted);width:22px;font-size:14px;}
+  .lb-rank.gold{color:#C9971C;}
+  .lb-name{flex:1;font-weight:700;font-size:14px;}
+  .lb-balance{font-weight:800;color:var(--sea-dark);font-size:14px;}
+
+  /* ADMIN */
+  .admin-row{
+    display:grid;grid-template-columns:1fr 90px auto;gap:10px;align-items:center;
+    padding:10px 4px;border-bottom:1px solid var(--border);
+  }
+  .admin-row:last-child{border-bottom:none;}
+  .admin-row .adesc{font-size:13px;font-weight:600;}
+  .resolve-btns{display:flex;gap:5px;}
+  .resolve-btns button{
+    width:30px;height:30px;border-radius:8px;border:1.5px solid var(--border);
+    background:white;cursor:pointer;font-size:14px;
+    display:flex;align-items:center;justify-content:center;
+    transition:background 100ms ease, border-color 100ms ease;
+  }
+  .resolve-btns button.on-yes{background:#D4EDDA;border-color:#8fcf9f;}
+  .resolve-btns button.on-no{background:#F8D7DA;border-color:#e8a3ab;}
+  .lock-note{background:#FFF3CD;color:#856404;font-size:12px;padding:10px 14px;border-radius:10px;margin-bottom:16px;}
+  .section-title{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:0.06em;color:var(--muted);margin:22px 0 10px;}
+  .section-title:first-child{margin-top:0;}
+  .hint{font-size:12px;color:var(--muted);margin-top:4px;}
+  .toast{
+    position:fixed;bottom:20px;left:50%;transform:translateX(-50%);
+    background:var(--navy);color:white;padding:10px 20px;border-radius:999px;
+    font-size:13px;font-weight:600;opacity:0;pointer-events:none;
+    transition:opacity 200ms ease, transform 200ms ease;z-index:50;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+  .empty{text-align:center;color:var(--muted);font-size:13px;padding:20px;}
+
+  /* WIN OVERLAY */
+  .win-overlay{
+    position:fixed;inset:0;
+    background:rgba(18,48,71,0.72);
+    display:flex;align-items:center;justify-content:center;
+    padding:20px;z-index:100;
+    opacity:0;pointer-events:none;
+    transition:opacity 200ms ease;
+  }
+  .win-overlay.show{opacity:1;pointer-events:auto;}
+  .win-card{
+    background:linear-gradient(160deg, #FFFDF8, #FFF4DE);
+    border-radius:24px;padding:32px 26px;max-width:380px;width:100%;
+    text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.35);
+    animation:popIn 380ms cubic-bezier(.34,1.56,.64,1);
+  }
+  @keyframes popIn{
+    from{transform:scale(0.7) translateY(20px);opacity:0;}
+    to{transform:scale(1) translateY(0);opacity:1;}
+  }
+  .win-card .confetti{font-size:28px;letter-spacing:8px;margin-bottom:8px;}
+  .win-card h2{margin:0 0 16px;font-size:26px;font-weight:900;color:var(--coral-dark);letter-spacing:-0.02em;}
+  .win-list{display:flex;flex-direction:column;gap:8px;margin-bottom:16px;}
+  .win-item{
+    display:flex;align-items:center;gap:8px;
+    background:white;border:1px solid var(--border);border-radius:12px;
+    padding:9px 12px;text-align:left;
+  }
+  .win-emoji{font-size:18px;}
+  .win-desc{flex:1;font-size:12.5px;font-weight:600;}
+  .win-amount{font-weight:800;color:#155724;font-size:13px;white-space:nowrap;}
+  .win-total{font-size:14px;font-weight:700;margin-bottom:18px;color:var(--navy);}
+  .win-card .btn{width:100%;}
+</style>
+</head>
+<body>
+<div class="wrap" id="app"></div>
+<div class="toast" id="toast"></div>
+<div class="win-overlay" id="winOverlay"></div>
+
+<script>
+const STATE_KEY = 'vacanza-sabaudi-state-v1';
+const MY_NAME_KEY = 'vacanza-sabaudi-mio-nome';
+const STARTING_BALANCE = 1000;
+const DEFAULT_PIN = '2026';
+
+const DEFAULT_EVENTS = [
+  {id:'e1',  emoji:'🏊', desc:'Romina ritorna a nuoto',                                  odds:1.8, resolved:null},
+  {id:'e2',  emoji:'⛴️', desc:'Care perde il traghetto perché Francesca fa tardi',        odds:3.2, resolved:null},
+  {id:'e3',  emoji:'😤', desc:'Jacopo sbrocca a Romina il secondo giorno',                 odds:2.5, resolved:null},
+  {id:'e4',  emoji:'⏱️', desc:'Jacopo sbrocca a Romina nella prima ora',                   odds:4.0, resolved:null},
+  {id:'e5',  emoji:'⏳', desc:'Jacopo sbrocca a Romina dopo quindici minuti',               odds:6.5, resolved:null},
+  {id:'e6',  emoji:'🪑', desc:'Care rompe un mobile di casa nella prima settimana',         odds:2.8, resolved:null},
+  {id:'e7',  emoji:'🦵', desc:'Care rompe un ginocchio a Sara entro il settimo giorno',      odds:5.5, resolved:null},
+  {id:'e8',  emoji:'🚗', desc:"Care sfrigia la macchina all'ingresso della casa",            odds:3.5, resolved:null},
+  {id:'e9',  emoji:'🔥', desc:'Incendio sulla pineta di fianco casa',                       odds:8.0, resolved:null},
+  {id:'e10', emoji:'🍢', desc:'Romina mangia gli arrosticini',                              odds:1.3, resolved:null},
+];
+
+let state = null;
+let currentUser = null;
+let isAdmin = false;
+let activeTab = 'bet';
+let drafts = {};
+let toastTimer = null;
+const hasStorage = !!(window.storage && typeof window.storage.get === 'function');
+let offlineMode = !hasStorage;
+
+function defaultState(){
+  return {
+    adminPin: DEFAULT_PIN,
+    events: JSON.parse(JSON.stringify(DEFAULT_EVENTS)),
+    users: {}
+  };
+}
+
+async function loadState(){
+  if(!hasStorage){
+    state = defaultState();
+    return;
+  }
+  try{
+    const res = await window.storage.get(STATE_KEY, true);
+    state = JSON.parse(res.value);
+  }catch(e){
+    state = defaultState();
+    try{
+      await window.storage.set(STATE_KEY, JSON.stringify(state), true);
+    }catch(e2){
+      offlineMode = true;
+    }
+  }
+}
+
+async function saveState(){
+  if(!hasStorage) return;
+  try{
+    await window.storage.set(STATE_KEY, JSON.stringify(state), true);
+  }catch(e){
+    showToast('Errore di salvataggio, riprova.');
+  }
+}
+
+async function refreshQuiet(){
+  if(!hasStorage) return;
+  if(document.activeElement && document.activeElement.tagName === 'INPUT') return;
+  try{
+    const res = await window.storage.get(STATE_KEY, true);
+    const fresh = JSON.stringify(JSON.parse(res.value));
+    if(fresh !== JSON.stringify(state)){
+      state = JSON.parse(fresh);
+      render();
+    }
+  }catch(e){ /* ignore */ }
+}
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
+}
+
+function fmt(n){
+  return Math.round(n*100)/100;
+}
+
+async function login(name){
+  name = name.trim();
+  if(!name) return;
+  if(!state.users[name]){
+    state.users[name] = {balance: STARTING_BALANCE, bets:{}};
+    await saveState();
+  }
+  currentUser = name;
+  if(hasStorage){
+    try{ await window.storage.set(MY_NAME_KEY, name, false); }catch(e){}
+  }
+  activeTab = 'bet';
+  render();
+}
+
+async function logout(){
+  currentUser = null;
+  isAdmin = false;
+  if(hasStorage){
+    try{ await window.storage.delete(MY_NAME_KEY, false); }catch(e){}
+  }
+  render();
+}
+
+async function placeBet(eventId, amountRaw){
+  const amount = parseFloat(amountRaw);
+  const user = state.users[currentUser];
+  const ev = state.events.find(e=>e.id===eventId);
+  if(!amount || amount <= 0){ showToast('Inserisci un importo valido.'); return; }
+  if(ev.resolved !== null){ showToast('Evento già risolto, non puoi più scommettere.'); return; }
+  const existing = user.bets[eventId];
+  const alreadyStaked = existing ? existing.amount : 0;
+  const available = user.balance + alreadyStaked;
+  if(amount > available){ showToast('Sabaudi insufficienti.'); return; }
+  user.balance = fmt(available - amount);
+  user.bets[eventId] = {amount: fmt(amount), settled:false, celebrated:false};
+  drafts[eventId] = '';
+  await saveState();
+  showToast('Scommessa registrata: ' + fmt(amount) + ' sabaudi su "' + ev.desc + '"');
+  render();
+}
+
+async function updateOdds(eventId, val){
+  const odds = parseFloat(val);
+  if(!odds || odds <= 0) return;
+  const ev = state.events.find(e=>e.id===eventId);
+  ev.odds = fmt(odds);
+  await saveState();
+  showToast('Quota aggiornata.');
+}
+
+async function addEvent(desc, oddsRaw, emojiRaw){
+  desc = (desc||'').trim();
+  if(!desc){ showToast('Scrivi una descrizione per la nuova scommessa.'); return; }
+  const odds = parseFloat(oddsRaw) || 2.0;
+  const emoji = (emojiRaw||'').trim() || '🎲';
+  const id = 'e' + Date.now();
+  state.events.push({id, emoji, desc, odds: fmt(odds), resolved:null});
+  await saveState();
+  showToast('Nuova scommessa aggiunta: "' + desc + '"');
+  render();
+}
+
+async function resolveEvent(eventId, outcome){
+  const ev = state.events.find(e=>e.id===eventId);
+  if(ev.resolved === outcome){
+    // toggle off / undo
+    await unresolveEvent(eventId);
+    return;
+  }
+  if(ev.resolved !== null){
+    await unresolveEvent(eventId, true);
+  }
+  ev.resolved = outcome;
+  Object.keys(state.users).forEach(name=>{
+    const u = state.users[name];
+    const bet = u.bets[eventId];
+    if(bet && !bet.settled){
+      if(outcome === true){
+        u.balance = fmt(u.balance + bet.amount * ev.odds);
+      }
+      bet.settled = true;
+    }
+  });
+  await saveState();
+  render();
+}
+
+async function unresolveEvent(eventId, silent){
+  const ev = state.events.find(e=>e.id===eventId);
+  if(ev.resolved === null) return;
+  Object.keys(state.users).forEach(name=>{
+    const u = state.users[name];
+    const bet = u.bets[eventId];
+    if(bet && bet.settled){
+      if(ev.resolved === true){
+        u.balance = fmt(u.balance - bet.amount * ev.odds);
+      }
+      bet.settled = false;
+    }
+  });
+  ev.resolved = null;
+  if(!silent){
+    await saveState();
+    render();
+  }
+}
+
+function tryAdminLogin(pin){
+  if(pin === state.adminPin){
+    isAdmin = true;
+    activeTab = 'admin';
+    render();
+  }else{
+    showToast('PIN errato.');
+  }
+}
+
+function renderLogin(){
+  return `
+    <header class="top">
+      <div class="brand">
+        <div class="logo">🏖️</div>
+        <div><h1>Sabaudi Bet</h1><p>Scommesse vacanza</p></div>
+      </div>
+    </header>
+    <div class="card login-card">
+      <h2>Chi sei?</h2>
+      <p>Iscriviti per ricevere ${STARTING_BALANCE} sabaudi e iniziare a scommettere.</p>
+      <div class="login-row">
+        <input type="text" id="nameInput" placeholder="Il tuo nome" onkeydown="if(event.key==='Enter') doLogin();">
+        <button class="btn btn-primary" onclick="doLogin()">Entra</button>
+      </div>
+    </div>
+  `;
+}
+
+function eventStatusBadge(ev){
+  if(ev.resolved === true) return '<span class="status vinta">✓ successo</span>';
+  if(ev.resolved === false) return '<span class="status persa">✗ non successo</span>';
+  return '<span class="status aperta">aperta</span>';
+}
+
+function renderBetTab(){
+  const user = state.users[currentUser];
+  const rows = state.events.map(ev=>{
+    const bet = user.bets[ev.id];
+    const draftVal = drafts[ev.id] || '';
+    const locked = ev.resolved !== null;
+    let betInfo = '';
+    if(bet){
+      let outcomeTxt = '';
+      if(ev.resolved === true) outcomeTxt = ' — vinta! +' + fmt(bet.amount*ev.odds) + ' sabaudi';
+      else if(ev.resolved === false) outcomeTxt = ' — persa';
+      betInfo = `<div class="my-bet">Hai puntato <b>${bet.amount} sabaudi</b>${outcomeTxt}</div>`;
+    }
+    return `
+      <div class="event">
+        <div class="emoji">${ev.emoji}</div>
+        <div class="body">
+          <p class="desc">${ev.desc}</p>
+          <div class="meta">
+            <span class="quota">quota ×${ev.odds}</span>
+            ${eventStatusBadge(ev)}
+          </div>
+          ${!locked ? `
+          <div class="bet-row">
+            <input type="number" min="1" step="1" placeholder="sabaudi" value="${draftVal}"
+              oninput="drafts['${ev.id}']=this.value"
+              onkeydown="if(event.key==='Enter') placeBetUI('${ev.id}');">
+            <button class="btn btn-sea btn-small" onclick="placeBetUI('${ev.id}')">${bet? 'Aggiorna' : 'Scommetti'}</button>
+          </div>
+          ` : ''}
+          ${betInfo}
+        </div>
+      </div>
+    `;
+  }).join('');
+  return `
+    <div class="section-title">Eventi aperti</div>
+    ${rows}
+  `;
+}
+
+function renderLeaderboard(){
+  const list = Object.entries(state.users)
+    .map(([name,u])=>({name, balance:u.balance}))
+    .sort((a,b)=>b.balance-a.balance);
+  if(list.length === 0) return '<div class="empty">Ancora nessun iscritto.</div>';
+  const medals = ['🥇','🥈','🥉'];
+  const rows = list.map((u,i)=>`
+    <div class="lb-row">
+      <div class="lb-rank ${i<3?'gold':''}">${medals[i] || (i+1)}</div>
+      <div class="lb-name">${u.name}${u.name===currentUser?' (tu)':''}</div>
+      <div class="lb-balance">${fmt(u.balance)} SAB</div>
+    </div>
+  `).join('');
+  return `<div class="card">${rows}</div>`;
+}
+
+function renderAdmin(){
+  if(!isAdmin){
+    return `
+      <div class="card" style="max-width:360px;">
+        <div class="section-title">Accesso amministratore</div>
+        <div class="login-row">
+          <input type="password" id="pinInput" placeholder="PIN admin" onkeydown="if(event.key==='Enter') doAdminLogin();">
+          <button class="btn btn-sea" onclick="doAdminLogin()">Entra</button>
+        </div>
+      </div>
+    `;
+  }
+  const rows = state.events.map(ev=>`
+    <div class="admin-row">
+      <div class="adesc">${ev.emoji} ${ev.desc}</div>
+      <input type="number" step="0.1" min="1" value="${ev.odds}"
+        onchange="updateOdds('${ev.id}', this.value)">
+      <div class="resolve-btns">
+        <button title="Segna come successo" class="${ev.resolved===true?'on-yes':''}" onclick="resolveEvent('${ev.id}', true)">✓</button>
+        <button title="Segna come non successo" class="${ev.resolved===false?'on-no':''}" onclick="resolveEvent('${ev.id}', false)">✗</button>
+      </div>
+    </div>
+  `).join('');
+  return `
+    <div class="lock-note">Modifica le quote in qualsiasi momento. Segna ✓ o ✗ per risolvere un evento e accreditare automaticamente le vincite. Premi di nuovo lo stesso simbolo per annullare la risoluzione.</div>
+    <div class="card">${rows}</div>
+    <div class="section-title">Aggiungi nuova scommessa</div>
+    <div class="card">
+      <div style="margin-bottom:10px;">
+        <input type="text" id="newEventDesc" placeholder="Descrizione (es. Sara si perde in centro)">
+      </div>
+      <div style="display:flex;gap:8px;">
+        <input type="number" id="newEventOdds" placeholder="Quota" step="0.1" min="1" value="2" style="max-width:100px;">
+        <input type="text" id="newEventEmoji" placeholder="Emoji" maxlength="4" style="max-width:90px;">
+        <button class="btn btn-sea" onclick="doAddEvent()">Aggiungi</button>
+      </div>
+      <p class="hint">Appare subito nella lista scommesse di tutti.</p>
+    </div>
+    <div class="section-title">Zona pericolosa</div>
+    <div class="card">
+      <button class="btn btn-ghost" onclick="doResetAll()">Azzera tutto (utenti, saldi, scommesse)</button>
+      <p class="hint">Le quote restano quelle attuali. Questa azione non è reversibile.</p>
+    </div>
+  `;
+}
+
+function offlineBanner(){
+  return offlineMode ? `<div class="lock-note">⚠️ Anteprima locale: questa pagina non è collegata al salvataggio condiviso di Claude, quindi i dati non vengono salvati né condivisi con gli altri. Apri il link pubblicato dall'artifact su claude.ai per la versione funzionante.</div>` : '';
+}
+
+function getPendingWins(){
+  if(!currentUser) return [];
+  const user = state.users[currentUser];
+  if(!user) return [];
+  const wins = [];
+  state.events.forEach(ev=>{
+    if(ev.resolved === true){
+      const bet = user.bets[ev.id];
+      if(bet && bet.settled && !bet.celebrated){
+        wins.push({eventId:ev.id, desc:ev.desc, emoji:ev.emoji, amount:bet.amount, payout: fmt(bet.amount*ev.odds)});
+      }
+    }
+  });
+  return wins;
+}
+
+function checkForWins(){
+  const overlay = document.getElementById('winOverlay');
+  if(!overlay) return;
+  const wins = getPendingWins();
+  if(wins.length === 0){
+    overlay.classList.remove('show');
+    overlay.innerHTML = '';
+    return;
+  }
+  const total = fmt(wins.reduce((s,w)=>s+w.payout,0));
+  overlay.innerHTML = `
+    <div class="win-card">
+      <div class="confetti">🎉🎊✨🎊🎉</div>
+      <h2>HAI VINTO!</h2>
+      <div class="win-list">
+        ${wins.map(w=>`
+          <div class="win-item">
+            <span class="win-emoji">${w.emoji}</span>
+            <span class="win-desc">${w.desc}</span>
+            <span class="win-amount">+${w.payout} SAB</span>
+          </div>
+        `).join('')}
+      </div>
+      <div class="win-total">Totale vinto: <b>${total} sabaudi</b></div>
+      <button class="btn btn-primary" onclick="claimWins()">Riscuoti e continua</button>
+    </div>
+  `;
+  overlay.classList.add('show');
+}
+
+async function claimWins(){
+  const wins = getPendingWins();
+  const user = state.users[currentUser];
+  wins.forEach(w=>{ user.bets[w.eventId].celebrated = true; });
+  await saveState();
+  const overlay = document.getElementById('winOverlay');
+  overlay.classList.remove('show');
+  overlay.innerHTML = '';
+}
+
+function render(){
+  const app = document.getElementById('app');
+  if(!currentUser){
+    app.innerHTML = offlineBanner() + renderLogin();
+    checkForWins();
+    return;
+  }
+  const user = state.users[currentUser];
+  app.innerHTML = offlineBanner() + `
+    <header class="top">
+      <div class="brand">
+        <div class="logo">🏖️</div>
+        <div><h1>Sabaudi Bet</h1><p>Scommesse vacanza</p></div>
+      </div>
+      <div class="userbox">
+        <span class="name">${currentUser}</span>
+        <span class="balance">${fmt(user.balance)} SAB</span>
+        <button onclick="logout()">cambia utente</button>
+      </div>
+    </header>
+    <div class="tabs">
+      <div class="tab ${activeTab==='bet'?'active':''}" onclick="setTab('bet')">Scommesse</div>
+      <div class="tab ${activeTab==='lb'?'active':''}" onclick="setTab('lb')">Classifica</div>
+      <div class="tab ${activeTab==='admin'?'active':''}" onclick="setTab('admin')">Admin</div>
+    </div>
+    ${activeTab==='bet' ? renderBetTab() : ''}
+    ${activeTab==='lb' ? renderLeaderboard() : ''}
+    ${activeTab==='admin' ? renderAdmin() : ''}
+  `;
+  checkForWins();
+}
+
+function setTab(t){ activeTab = t; render(); }
+function doLogin(){ login(document.getElementById('nameInput').value); }
+function doAdminLogin(){ tryAdminLogin(document.getElementById('pinInput').value); }
+function placeBetUI(eventId){ placeBet(eventId, drafts[eventId]); }
+function doAddEvent(){
+  addEvent(
+    document.getElementById('newEventDesc').value,
+    document.getElementById('newEventOdds').value,
+    document.getElementById('newEventEmoji').value
+  );
+}
+async function doResetAll(){
+  if(!confirm('Sicuro di voler azzerare utenti, saldi e scommesse?')) return;
+  state.users = {};
+  await saveState();
+  render();
+}
+
+async function init(){
+  await loadState();
+  if(hasStorage){
+    try{
+      const res = await window.storage.get(MY_NAME_KEY, false);
+      if(res && res.value && state.users[res.value]){
+        currentUser = res.value;
+      }
+    }catch(e){ /* nessun utente salvato */ }
+  }
+  render();
+  if(hasStorage) setInterval(refreshQuiet, 8000);
+}
+
+init();
+</script>
+</body>
+</html>
