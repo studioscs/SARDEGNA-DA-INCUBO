@@ -238,6 +238,8 @@
     background:var(--navy);color:#E9F3F5;padding:14px;border-radius:10px;
     font-size:11.5px;overflow-x:auto;line-height:1.6;
   }
+  .lb-sub{font-size:11px;color:var(--muted);font-weight:600;margin-top:2px;}
+  .lb-name{flex:1;font-weight:700;font-size:14px;}
 </style>
 </head>
 <body>
@@ -250,7 +252,8 @@
 
 <script>
 /* =======================================================================
-   CONFIGURAZIONE SUPABASE — incolla qui i tuoi valori (vedi istruzioni chat)
+   CONFIGURAZIONE SUPABASE — incolla qui i tuoi due valori
+   (Settings → API: "Project URL" senza /rest/v1/ , e la chiave anon/publishable)
    ======================================================================= */
 const SUPABASE_URL = "https://xkhouazttdqtsafcosno.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhraG91YXp0dGRxdHNhZmNvc25vIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQ0MDU4MTQsImV4cCI6MjA5OTk4MTgxNH0.JNHAbZK7P7pDYPt6cz7oPyWBBXtRIE1e4iV2HTBAFQE";
@@ -258,113 +261,131 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
 const MY_NAME_KEY = 'vacanza-sabaudi-mio-nome';
 const STARTING_BALANCE = 1000;
-const DEFAULT_PIN = '2026';
+const ADMIN_PIN = '2026';
 
 const DEFAULT_EVENTS = [
-  {id:'e1',  emoji:'🏊', desc:'Romina ritorna a nuoto',                                  odds:1.8, resolved:null},
-  {id:'e2',  emoji:'⛴️', desc:'Care perde il traghetto perché Francesca fa tardi',        odds:3.2, resolved:null},
-  {id:'e3',  emoji:'😤', desc:'Jacopo sbrocca a Romina il secondo giorno',                 odds:2.5, resolved:null},
-  {id:'e4',  emoji:'⏱️', desc:'Jacopo sbrocca a Romina nella prima ora',                   odds:4.0, resolved:null},
-  {id:'e5',  emoji:'⏳', desc:'Jacopo sbrocca a Romina dopo quindici minuti',               odds:6.5, resolved:null},
-  {id:'e6',  emoji:'🪑', desc:'Care rompe un mobile di casa nella prima settimana',         odds:2.8, resolved:null},
-  {id:'e7',  emoji:'🦵', desc:'Care rompe un ginocchio a Sara entro il settimo giorno',      odds:5.5, resolved:null},
-  {id:'e8',  emoji:'🚗', desc:"Care sfrigia la macchina all'ingresso della casa",            odds:3.5, resolved:null},
-  {id:'e9',  emoji:'🔥', desc:'Incendio sulla pineta di fianco casa',                       odds:8.0, resolved:null},
-  {id:'e10', emoji:'🍢', desc:'Romina mangia gli arrosticini',                              odds:1.3, resolved:null},
+  {id:'e01', emoji:'🏊', descr:'Romina ritorna a nuoto',                                 odds:1.8, resolved:null},
+  {id:'e02', emoji:'⛴️', descr:'Care perde il traghetto perché Francesca fa tardi',       odds:3.2, resolved:null},
+  {id:'e03', emoji:'😤', descr:'Jacopo sbrocca a Romina il secondo giorno',                odds:2.5, resolved:null},
+  {id:'e04', emoji:'⏱️', descr:'Jacopo sbrocca a Romina nella prima ora',                  odds:4.0, resolved:null},
+  {id:'e05', emoji:'⏳', descr:'Jacopo sbrocca a Romina dopo quindici minuti',              odds:6.5, resolved:null},
+  {id:'e06', emoji:'🪑', descr:'Care rompe un mobile di casa nella prima settimana',        odds:2.8, resolved:null},
+  {id:'e07', emoji:'🦵', descr:'Care rompe un ginocchio a Sara entro il settimo giorno',     odds:5.5, resolved:null},
+  {id:'e08', emoji:'🚗', descr:"Care sfrigia la macchina all'ingresso della casa",           odds:3.5, resolved:null},
+  {id:'e09', emoji:'🔥', descr:'Incendio sulla pineta di fianco casa',                      odds:8.0, resolved:null},
+  {id:'e10', emoji:'🍢', descr:'Romina mangia gli arrosticini',                             odds:1.3, resolved:null},
 ];
 
-let state = null;
+/* MODELLO DATI
+   - events: una riga per scommessa (solo l'admin la modifica)
+   - bets:   una riga per (utente, evento) — ogni persona scrive solo le proprie
+   - players: elenco iscritti
+   Il SALDO NON viene mai salvato: si ricalcola da scommesse + esiti.
+   Così due persone che agiscono insieme non si sovrascrivono mai a vicenda. */
+let events = [];
+let bets = [];
+let players = [];
+
 let currentUser = null;
 let isAdmin = false;
 let activeTab = 'bet';
 let drafts = {};
 let toastTimer = null;
-let firstLoad = true;
 let sb = null;
+let loaded = false;
 
 const configReady = !!(SUPABASE_URL && SUPABASE_URL.indexOf('INSERISCI') === -1 &&
-                        SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.indexOf('INSERISCI') === -1);
+                       SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.indexOf('INSERISCI') === -1);
 
-function defaultState(){
-  return {
-    adminPin: DEFAULT_PIN,
-    events: JSON.parse(JSON.stringify(DEFAULT_EVENTS)),
-    users: {}
-  };
-}
-
-function normalizeState(){
-  if(state.events && !Array.isArray(state.events)){
-    state.events = Object.keys(state.events).sort((a,b)=>a-b).map(k=>state.events[k]);
-  }
-  if(!state.events) state.events = JSON.parse(JSON.stringify(DEFAULT_EVENTS));
-  if(!state.users) state.users = {};
-  if(!state.adminPin) state.adminPin = DEFAULT_PIN;
-  Object.values(state.users).forEach(u=>{ if(!u.bets) u.bets = {}; });
-}
-
-async function startSync(){
-  // caricamento iniziale
-  try{
-    const { data, error } = await sb.from('sabaudi_state').select('data').eq('id', 1).single();
-    if(error || !data){
-      state = defaultState();
-      await sb.from('sabaudi_state').upsert({ id: 1, data: state });
-    }else{
-      state = data.data;
-      normalizeState();
-    }
-  }catch(e){
-    state = defaultState();
-  }
-  if(firstLoad){
-    firstLoad = false;
-    const saved = localStorage.getItem(MY_NAME_KEY);
-    if(saved && state.users[saved]){
-      currentUser = saved;
-    }
-  }
-  render();
-
-  // sincronizzazione in tempo reale: si attiva sui cambiamenti fatti da chiunque
-  sb.channel('sabaudi-state-changes')
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'sabaudi_state', filter: 'id=eq.1' }, function(payload){
-      if(!payload.new || !payload.new.data) return;
-      state = payload.new.data;
-      normalizeState();
-      if(document.activeElement && document.activeElement.tagName === 'INPUT') return;
-      render();
-    })
-    .subscribe();
-}
-
-async function saveState(){
-  if(!sb) return;
-  try{
-    await sb.from('sabaudi_state').upsert({ id: 1, data: state });
-  }catch(e){
-    showToast('Errore di salvataggio, riprova.');
-  }
-}
+function fmt(n){ return Math.round(n*100)/100; }
 
 function showToast(msg){
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(()=>t.classList.remove('show'), 2200);
+  toastTimer = setTimeout(()=>t.classList.remove('show'), 2400);
 }
 
-function fmt(n){
-  return Math.round(n*100)/100;
+/* ---------- SALDO CALCOLATO (mai salvato, quindi mai in conflitto) ---------- */
+function betsOf(name){ return bets.filter(b=>b.player === name); }
+function eventById(id){ return events.find(e=>e.id === id); }
+
+function balanceOf(name){
+  let bal = STARTING_BALANCE;
+  betsOf(name).forEach(b=>{
+    const ev = eventById(b.event_id);
+    if(!ev) return;
+    bal -= b.amount;                              // la puntata esce sempre
+    if(ev.resolved === true) bal += b.amount * ev.odds;  // vinta: incassa
+  });
+  return fmt(bal);
 }
 
+function stakedOf(name){
+  let s = 0;
+  betsOf(name).forEach(b=>{
+    const ev = eventById(b.event_id);
+    if(ev && ev.resolved === null) s += b.amount;
+  });
+  return fmt(s);
+}
+
+function myBet(eventId){
+  return bets.find(b=>b.player === currentUser && b.event_id === eventId) || null;
+}
+
+/* ---------- CARICAMENTO E SINCRONIZZAZIONE ---------- */
+async function loadAll(){
+  const [evRes, betRes, plRes] = await Promise.all([
+    sb.from('sabaudi_events').select('*').order('id'),
+    sb.from('sabaudi_bets').select('*'),
+    sb.from('sabaudi_players').select('*')
+  ]);
+  events  = (evRes.data  || []).map(e=>({...e, odds: Number(e.odds), amount: undefined}));
+  bets    = (betRes.data || []).map(b=>({...b, amount: Number(b.amount)}));
+  players = (plRes.data  || []).map(p=>p.name);
+
+  if(events.length === 0){
+    await sb.from('sabaudi_events').insert(DEFAULT_EVENTS);
+    const again = await sb.from('sabaudi_events').select('*').order('id');
+    events = (again.data || []).map(e=>({...e, odds: Number(e.odds)}));
+  }
+  loaded = true;
+}
+
+function subscribeRealtime(){
+  sb.channel('sabaudi-live')
+    .on('postgres_changes', {event:'*', schema:'public', table:'sabaudi_events'},  onRemoteChange)
+    .on('postgres_changes', {event:'*', schema:'public', table:'sabaudi_bets'},    onRemoteChange)
+    .on('postgres_changes', {event:'*', schema:'public', table:'sabaudi_players'}, onRemoteChange)
+    .subscribe();
+}
+
+async function onRemoteChange(){
+  // ricarico i dati e ridisegno (a meno che l'utente stia scrivendo in un campo)
+  try{
+    const [evRes, betRes, plRes] = await Promise.all([
+      sb.from('sabaudi_events').select('*').order('id'),
+      sb.from('sabaudi_bets').select('*'),
+      sb.from('sabaudi_players').select('*')
+    ]);
+    if(evRes.data)  events  = evRes.data.map(e=>({...e, odds: Number(e.odds)}));
+    if(betRes.data) bets    = betRes.data.map(b=>({...b, amount: Number(b.amount)}));
+    if(plRes.data)  players = plRes.data.map(p=>p.name);
+  }catch(e){ return; }
+  if(document.activeElement && document.activeElement.tagName === 'INPUT') return;
+  render();
+}
+
+/* ---------- AZIONI ---------- */
 async function login(name){
-  name = name.trim();
+  name = (name||'').trim();
   if(!name) return;
-  if(!state.users[name]){
-    state.users[name] = {balance: STARTING_BALANCE, bets:{}};
-    await saveState();
+  if(!players.includes(name)){
+    const { error } = await sb.from('sabaudi_players').insert({ name });
+    if(error && error.code !== '23505'){ showToast('Errore iscrizione, riprova.'); return; }
+    if(!players.includes(name)) players.push(name);
   }
   currentUser = name;
   try{ localStorage.setItem(MY_NAME_KEY, name); }catch(e){}
@@ -381,97 +402,133 @@ function logout(){
 
 async function placeBet(eventId, amountRaw){
   const amount = parseFloat(amountRaw);
-  const user = state.users[currentUser];
-  const ev = state.events.find(e=>e.id===eventId);
+  const ev = eventById(eventId);
+  if(!ev){ showToast('Scommessa non trovata.'); return; }
   if(!amount || amount <= 0){ showToast('Inserisci un importo valido.'); return; }
   if(ev.resolved !== null){ showToast('Evento già risolto, non puoi più scommettere.'); return; }
-  const existing = user.bets[eventId];
-  const alreadyStaked = existing ? existing.amount : 0;
-  const available = user.balance + alreadyStaked;
+
+  const existing = myBet(eventId);
+  const available = balanceOf(currentUser) + (existing ? existing.amount : 0);
   if(amount > available){ showToast('Sabaudi insufficienti.'); return; }
-  user.balance = fmt(available - amount);
-  user.bets[eventId] = {amount: fmt(amount), settled:false, celebrated:false};
+
+  // scrive SOLO la propria riga → nessun conflitto con gli altri
+  const { error } = await sb.from('sabaudi_bets')
+    .upsert({ player: currentUser, event_id: eventId, amount: fmt(amount), celebrated: false },
+            { onConflict: 'player,event_id' });
+  if(error){ showToast('Errore nel salvare la scommessa.'); return; }
+
+  if(existing){ existing.amount = fmt(amount); existing.celebrated = false; }
+  else{ bets.push({ player: currentUser, event_id: eventId, amount: fmt(amount), celebrated: false }); }
+
   drafts[eventId] = '';
-  await saveState();
-  showToast('Scommessa registrata: ' + fmt(amount) + ' sabaudi su "' + ev.desc + '"');
+  showToast('Scommessa registrata: ' + fmt(amount) + ' sabaudi');
   render();
 }
 
 async function updateOdds(eventId, val){
   const odds = parseFloat(val);
-  if(!odds || odds <= 0) return;
-  const ev = state.events.find(e=>e.id===eventId);
-  ev.odds = fmt(odds);
-  await saveState();
+  if(!odds || odds <= 0){ showToast('Quota non valida.'); return; }
+  const { error } = await sb.from('sabaudi_events').update({ odds: fmt(odds) }).eq('id', eventId);
+  if(error){ showToast('Errore nel salvare la quota.'); return; }
+  const ev = eventById(eventId);
+  if(ev) ev.odds = fmt(odds);
   showToast('Quota aggiornata.');
+  render();
 }
 
-async function addEvent(desc, oddsRaw, emojiRaw){
-  desc = (desc||'').trim();
-  if(!desc){ showToast('Scrivi una descrizione per la nuova scommessa.'); return; }
-  const odds = parseFloat(oddsRaw) || 2.0;
+async function addEvent(descr, oddsRaw, emojiRaw){
+  descr = (descr||'').trim();
+  if(!descr){ showToast('Scrivi una descrizione per la nuova scommessa.'); return; }
+  const odds = parseFloat(oddsRaw);
+  if(!odds || odds <= 0){ showToast('Quota non valida.'); return; }
   const emoji = (emojiRaw||'').trim() || '🎲';
-  const id = 'e' + Date.now();
-  state.events.push({id, emoji, desc, odds: fmt(odds), resolved:null});
-  await saveState();
-  showToast('Nuova scommessa aggiunta: "' + desc + '"');
+  const id = 'x' + Date.now();
+  const { error } = await sb.from('sabaudi_events')
+    .insert({ id, emoji, descr, odds: fmt(odds), resolved: null });
+  if(error){ showToast('Errore nel creare la scommessa.'); return; }
+  events.push({ id, emoji, descr, odds: fmt(odds), resolved: null });
+  showToast('Nuova scommessa aggiunta.');
   render();
 }
 
+// L'admin tocca SOLO la riga dell'evento. I saldi si ricalcolano da soli
+// su ogni dispositivo, quindi nessun pagamento può andare perso.
 async function resolveEvent(eventId, outcome){
-  const ev = state.events.find(e=>e.id===eventId);
-  if(ev.resolved === outcome){
-    await unresolveEvent(eventId);
-    return;
-  }
-  if(ev.resolved !== null){
-    await unresolveEvent(eventId, true);
-  }
-  ev.resolved = outcome;
-  Object.keys(state.users).forEach(name=>{
-    const u = state.users[name];
-    const bet = u.bets[eventId];
-    if(bet && !bet.settled){
-      if(outcome === true){
-        u.balance = fmt(u.balance + bet.amount * ev.odds);
-      }
-      bet.settled = true;
-    }
-  });
-  await saveState();
+  const ev = eventById(eventId);
+  if(!ev) return;
+  const newVal = (ev.resolved === outcome) ? null : outcome;
+  const { error } = await sb.from('sabaudi_events').update({ resolved: newVal }).eq('id', eventId);
+  if(error){ showToast('Errore nel salvare l\'esito.'); return; }
+  ev.resolved = newVal;
   render();
 }
 
-async function unresolveEvent(eventId, silent){
-  const ev = state.events.find(e=>e.id===eventId);
-  if(ev.resolved === null) return;
-  Object.keys(state.users).forEach(name=>{
-    const u = state.users[name];
-    const bet = u.bets[eventId];
-    if(bet && bet.settled){
-      if(ev.resolved === true){
-        u.balance = fmt(u.balance - bet.amount * ev.odds);
-      }
-      bet.settled = false;
-    }
-  });
-  ev.resolved = null;
-  if(!silent){
-    await saveState();
-    render();
-  }
+async function deleteEvent(eventId){
+  if(!confirm('Eliminare questa scommessa e tutte le puntate collegate?')) return;
+  await sb.from('sabaudi_bets').delete().eq('event_id', eventId);
+  await sb.from('sabaudi_events').delete().eq('id', eventId);
+  events = events.filter(e=>e.id !== eventId);
+  bets = bets.filter(b=>b.event_id !== eventId);
+  showToast('Scommessa eliminata.');
+  render();
 }
 
 function tryAdminLogin(pin){
-  if(pin === state.adminPin){
-    isAdmin = true;
-    activeTab = 'admin';
-    render();
-  }else{
-    showToast('PIN errato.');
-  }
+  if(pin === ADMIN_PIN){ isAdmin = true; activeTab = 'admin'; render(); }
+  else showToast('PIN errato.');
 }
 
+/* ---------- SCHERMATA VITTORIA ---------- */
+function getPendingWins(){
+  if(!currentUser) return [];
+  const wins = [];
+  betsOf(currentUser).forEach(b=>{
+    const ev = eventById(b.event_id);
+    if(ev && ev.resolved === true && !b.celebrated){
+      wins.push({ eventId: ev.id, descr: ev.descr, emoji: ev.emoji, payout: fmt(b.amount*ev.odds) });
+    }
+  });
+  return wins;
+}
+
+function checkForWins(){
+  const overlay = document.getElementById('winOverlay');
+  if(!overlay) return;
+  const wins = getPendingWins();
+  if(wins.length === 0){ overlay.classList.remove('show'); overlay.innerHTML=''; return; }
+  const total = fmt(wins.reduce((s,w)=>s+w.payout,0));
+  overlay.innerHTML =
+    '<div class="win-card">' +
+      '<div class="confetti">🎉🎊✨🎊🎉</div>' +
+      '<h2>HAI VINTO!</h2>' +
+      '<div class="win-list">' +
+        wins.map(w=>
+          '<div class="win-item">' +
+            '<span class="win-emoji">'+w.emoji+'</span>' +
+            '<span class="win-desc">'+w.descr+'</span>' +
+            '<span class="win-amount">+'+w.payout+' SAB</span>' +
+          '</div>').join('') +
+      '</div>' +
+      '<div class="win-total">Totale vinto: <b>'+total+' sabaudi</b></div>' +
+      '<button class="btn btn-primary" onclick="claimWins()">Riscuoti e continua</button>' +
+    '</div>';
+  overlay.classList.add('show');
+}
+
+async function claimWins(){
+  const wins = getPendingWins();
+  for(const w of wins){
+    await sb.from('sabaudi_bets').update({ celebrated: true })
+      .eq('player', currentUser).eq('event_id', w.eventId);
+    const b = bets.find(x=>x.player===currentUser && x.event_id===w.eventId);
+    if(b) b.celebrated = true;
+  }
+  const overlay = document.getElementById('winOverlay');
+  overlay.classList.remove('show');
+  overlay.innerHTML = '';
+}
+
+/* ---------- INTERFACCIA ---------- */
 function renderLogin(){
   return `
     <header class="top">
@@ -491,67 +548,68 @@ function renderLogin(){
   `;
 }
 
-function eventStatusBadge(ev){
-  if(ev.resolved === true) return '<span class="status vinta">✓ successo</span>';
+function statusBadge(ev){
+  if(ev.resolved === true)  return '<span class="status vinta">✓ successo</span>';
   if(ev.resolved === false) return '<span class="status persa">✗ non successo</span>';
   return '<span class="status aperta">aperta</span>';
 }
 
 function renderBetTab(){
-  const user = state.users[currentUser];
-  const rows = state.events.map(ev=>{
-    const bet = user.bets[ev.id];
+  if(events.length === 0) return '<div class="empty">Nessuna scommessa ancora. L\'admin può aggiungerne dal pannello.</div>';
+  const rows = events.map(ev=>{
+    const bet = myBet(ev.id);
     const draftVal = drafts[ev.id] || '';
     const locked = ev.resolved !== null;
     let betInfo = '';
     if(bet){
-      let outcomeTxt = '';
-      if(ev.resolved === true) outcomeTxt = ' — vinta! +' + fmt(bet.amount*ev.odds) + ' sabaudi';
-      else if(ev.resolved === false) outcomeTxt = ' — persa';
-      betInfo = `<div class="my-bet">Hai puntato <b>${bet.amount} sabaudi</b>${outcomeTxt}</div>`;
+      let outcome = '';
+      if(ev.resolved === true)  outcome = ' — vinta! +' + fmt(bet.amount*ev.odds) + ' sabaudi';
+      else if(ev.resolved === false) outcome = ' — persa';
+      betInfo = `<div class="my-bet">Hai puntato <b>${bet.amount} sabaudi</b>${outcome}</div>`;
     }
     return `
       <div class="event">
         <div class="emoji">${ev.emoji}</div>
         <div class="body">
-          <p class="desc">${ev.desc}</p>
+          <p class="desc">${ev.descr}</p>
           <div class="meta">
             <span class="quota">quota ×${ev.odds}</span>
-            ${eventStatusBadge(ev)}
+            ${statusBadge(ev)}
           </div>
           ${!locked ? `
           <div class="bet-row">
             <input type="number" min="1" step="1" placeholder="sabaudi" value="${draftVal}"
               oninput="drafts['${ev.id}']=this.value"
               onkeydown="if(event.key==='Enter') placeBetUI('${ev.id}');">
-            <button class="btn btn-sea btn-small" onclick="placeBetUI('${ev.id}')">${bet? 'Aggiorna' : 'Scommetti'}</button>
-          </div>
-          ` : ''}
+            <button class="btn btn-sea btn-small" onclick="placeBetUI('${ev.id}')">${bet?'Aggiorna':'Scommetti'}</button>
+          </div>` : ''}
           ${betInfo}
         </div>
-      </div>
-    `;
+      </div>`;
   }).join('');
-  return `
-    <div class="section-title">Eventi aperti</div>
-    ${rows}
-  `;
+  return `<div class="section-title">Eventi</div>${rows}`;
 }
 
 function renderLeaderboard(){
-  const list = Object.entries(state.users)
-    .map(([name,u])=>({name, balance:u.balance}))
-    .sort((a,b)=>b.balance-a.balance);
-  if(list.length === 0) return '<div class="empty">Ancora nessun iscritto.</div>';
+  if(players.length === 0) return '<div class="empty">Ancora nessun iscritto.</div>';
+  const list = players.map(n=>({
+    name: n,
+    balance: balanceOf(n),
+    staked: stakedOf(n),
+    open: betsOf(n).filter(b=>{const e=eventById(b.event_id); return e && e.resolved===null;}).length
+  })).sort((a,b)=> (b.balance+b.staked) - (a.balance+a.staked));
   const medals = ['🥇','🥈','🥉'];
   const rows = list.map((u,i)=>`
     <div class="lb-row">
       <div class="lb-rank ${i<3?'gold':''}">${medals[i] || (i+1)}</div>
-      <div class="lb-name">${u.name}${u.name===currentUser?' (tu)':''}</div>
-      <div class="lb-balance">${fmt(u.balance)} SAB</div>
-    </div>
-  `).join('');
-  return `<div class="card">${rows}</div>`;
+      <div class="lb-name">
+        ${u.name}${u.name===currentUser?' (tu)':''}
+        ${u.staked>0?`<div class="lb-sub">${u.staked} in gioco su ${u.open} scommess${u.open===1?'a':'e'}</div>`:''}
+      </div>
+      <div class="lb-balance">${u.balance} SAB</div>
+    </div>`).join('');
+  return `<div class="card">${rows}</div>
+    <p class="hint" style="text-align:center;">Ordinati per patrimonio totale (saldo + sabaudi ancora in gioco).</p>`;
 }
 
 function renderAdmin(){
@@ -563,23 +621,27 @@ function renderAdmin(){
           <input type="password" id="pinInput" placeholder="PIN admin" onkeydown="if(event.key==='Enter') doAdminLogin();">
           <button class="btn btn-sea" onclick="doAdminLogin()">Entra</button>
         </div>
-      </div>
-    `;
+      </div>`;
   }
-  const rows = state.events.map(ev=>`
+  const rows = events.map(ev=>{
+    const n = bets.filter(b=>b.event_id===ev.id).length;
+    return `
     <div class="admin-row">
-      <div class="adesc">${ev.emoji} ${ev.desc}</div>
-      <input type="number" step="0.1" min="1" value="${ev.odds}"
-        onchange="updateOdds('${ev.id}', this.value)">
-      <div class="resolve-btns">
-        <button title="Segna come successo" class="${ev.resolved===true?'on-yes':''}" onclick="resolveEvent('${ev.id}', true)">✓</button>
-        <button title="Segna come non successo" class="${ev.resolved===false?'on-no':''}" onclick="resolveEvent('${ev.id}', false)">✗</button>
+      <div class="adesc">
+        ${ev.emoji} ${ev.descr}
+        <div class="lb-sub">${n} puntat${n===1?'a':'e'}</div>
       </div>
-    </div>
-  `).join('');
+      <input type="number" step="0.1" min="1" value="${ev.odds}" onchange="updateOdds('${ev.id}', this.value)">
+      <div class="resolve-btns">
+        <button title="Successo" class="${ev.resolved===true?'on-yes':''}" onclick="resolveEvent('${ev.id}', true)">✓</button>
+        <button title="Non successo" class="${ev.resolved===false?'on-no':''}" onclick="resolveEvent('${ev.id}', false)">✗</button>
+        <button title="Elimina" onclick="deleteEvent('${ev.id}')">🗑</button>
+      </div>
+    </div>`;
+  }).join('');
   return `
-    <div class="lock-note">Modifica le quote in qualsiasi momento. Segna ✓ o ✗ per risolvere un evento e accreditare automaticamente le vincite. Premi di nuovo lo stesso simbolo per annullare la risoluzione.</div>
-    <div class="card">${rows}</div>
+    <div class="lock-note">Le quote si modificano quando vuoi. ✓ o ✗ risolvono l'evento e i sabaudi si aggiornano su tutti i telefoni. Premi di nuovo lo stesso simbolo per annullare.</div>
+    <div class="card">${rows || '<div class="empty">Nessuna scommessa.</div>'}</div>
     <div class="section-title">Aggiungi nuova scommessa</div>
     <div class="card">
       <div style="margin-bottom:10px;">
@@ -590,14 +652,8 @@ function renderAdmin(){
         <input type="text" id="newEventEmoji" placeholder="Emoji" maxlength="4" style="max-width:90px;">
         <button class="btn btn-sea" onclick="doAddEvent()">Aggiungi</button>
       </div>
-      <p class="hint">Appare subito nella lista scommesse di tutti.</p>
-    </div>
-    <div class="section-title">Zona pericolosa</div>
-    <div class="card">
-      <button class="btn btn-ghost" onclick="doResetAll()">Azzera tutto (utenti, saldi, scommesse)</button>
-      <p class="hint">Le quote restano quelle attuali. Questa azione non è reversibile.</p>
-    </div>
-  `;
+      <p class="hint">Appare subito sul telefono di tutti.</p>
+    </div>`;
 }
 
 function renderSetupNeeded(){
@@ -610,109 +666,22 @@ function renderSetupNeeded(){
     </header>
     <div class="card setup-card">
       <h2 style="margin-top:0;">Manca la configurazione del database</h2>
-      <p style="font-size:13.5px;color:var(--muted);">Questa pagina usa Supabase come database condiviso gratuito. Devi collegarla al tuo progetto prima che funzioni.</p>
       <ol>
-        <li>Vai su <code>supabase.com</code> → accedi (va bene con GitHub) → <b>New project</b>. Scegli un nome e una password del database a caso, poi aspetta 1-2 minuti che venga creato.</li>
-        <li>Nel progetto: <b>SQL Editor → New query</b>, incolla ed esegui (pulsante Run):
-          <pre>create table public.sabaudi_state (
-  id int primary key default 1,
-  data jsonb not null default '{}'::jsonb
-);
-
-insert into public.sabaudi_state (id, data)
-values (1, '{}'::jsonb);
-
-alter table public.sabaudi_state
-  enable row level security;
-
-create policy "public select" on public.sabaudi_state
-  for select using (true);
-create policy "public insert" on public.sabaudi_state
-  for insert with check (true);
-create policy "public update" on public.sabaudi_state
-  for update using (true) with check (true);</pre>
-        </li>
-        <li><b>Database → Replication</b> (o l'icona realtime accanto alla tabella in Table Editor) → attiva Realtime per la tabella <code>sabaudi_state</code>. Senza questo passaggio gli aggiornamenti non arrivano agli altri in automatico.</li>
-        <li><b>Settings → API</b> → copia <b>Project URL</b> e la chiave <b>anon public</b>.</li>
-        <li>Incolla i due valori all'inizio dello script di questo file, al posto di <code>"INSERISCI_QUI"</code>, poi salva e ricarica.</li>
+        <li>Su <code>supabase.com</code>: <b>New project</b>, aspetta 1-2 minuti.</li>
+        <li><b>SQL Editor → New query</b>, incolla ed esegui lo script che trovi in chat.</li>
+        <li><b>Database → Replication</b>: attiva Realtime sulle tre tabelle <code>sabaudi_*</code>.</li>
+        <li><b>Settings → API</b>: copia <b>Project URL</b> (senza <code>/rest/v1/</code>) e la chiave <b>anon</b>.</li>
+        <li>Incollali in cima allo script di questo file, nelle costanti <code>SUPABASE_URL</code> e <code>SUPABASE_ANON_KEY</code>.</li>
       </ol>
-      <p class="hint">Con le policy sopra i dati sono leggibili/scrivibili da chi ha URL e chiave pubblica — va bene per un gioco tra amici con soldi finti, non usarci altro.</p>
-    </div>
-  `;
-}
-
-function getPendingWins(){
-  if(!currentUser) return [];
-  const user = state.users[currentUser];
-  if(!user) return [];
-  const wins = [];
-  state.events.forEach(ev=>{
-    if(ev.resolved === true){
-      const bet = user.bets[ev.id];
-      if(bet && bet.settled && !bet.celebrated){
-        wins.push({eventId:ev.id, desc:ev.desc, emoji:ev.emoji, amount:bet.amount, payout: fmt(bet.amount*ev.odds)});
-      }
-    }
-  });
-  return wins;
-}
-
-function checkForWins(){
-  const overlay = document.getElementById('winOverlay');
-  if(!overlay) return;
-  const wins = getPendingWins();
-  if(wins.length === 0){
-    overlay.classList.remove('show');
-    overlay.innerHTML = '';
-    return;
-  }
-  const total = fmt(wins.reduce((s,w)=>s+w.payout,0));
-  overlay.innerHTML = `
-    <div class="win-card">
-      <div class="confetti">🎉🎊✨🎊🎉</div>
-      <h2>HAI VINTO!</h2>
-      <div class="win-list">
-        ${wins.map(w=>`
-          <div class="win-item">
-            <span class="win-emoji">${w.emoji}</span>
-            <span class="win-desc">${w.desc}</span>
-            <span class="win-amount">+${w.payout} SAB</span>
-          </div>
-        `).join('')}
-      </div>
-      <div class="win-total">Totale vinto: <b>${total} sabaudi</b></div>
-      <button class="btn btn-primary" onclick="claimWins()">Riscuoti e continua</button>
-    </div>
-  `;
-  overlay.classList.add('show');
-}
-
-async function claimWins(){
-  const wins = getPendingWins();
-  const user = state.users[currentUser];
-  wins.forEach(w=>{ user.bets[w.eventId].celebrated = true; });
-  await saveState();
-  const overlay = document.getElementById('winOverlay');
-  overlay.classList.remove('show');
-  overlay.innerHTML = '';
+    </div>`;
 }
 
 function render(){
   const app = document.getElementById('app');
-  if(!configReady){
-    app.innerHTML = renderSetupNeeded();
-    return;
-  }
-  if(!state){
-    app.innerHTML = '<div class="empty">Caricamento…</div>';
-    return;
-  }
-  if(!currentUser){
-    app.innerHTML = renderLogin();
-    checkForWins();
-    return;
-  }
-  const user = state.users[currentUser];
+  if(!configReady){ app.innerHTML = renderSetupNeeded(); return; }
+  if(!loaded){ app.innerHTML = '<div class="empty">Caricamento…</div>'; return; }
+  if(!currentUser){ app.innerHTML = renderLogin(); checkForWins(); return; }
+
   app.innerHTML = `
     <header class="top">
       <div class="brand">
@@ -721,7 +690,7 @@ function render(){
       </div>
       <div class="userbox">
         <span class="name">${currentUser}</span>
-        <span class="balance">${fmt(user.balance)} SAB</span>
+        <span class="balance">${balanceOf(currentUser)} SAB</span>
         <button onclick="logout()">cambia utente</button>
       </div>
     </header>
@@ -732,15 +701,14 @@ function render(){
     </div>
     ${activeTab==='bet' ? renderBetTab() : ''}
     ${activeTab==='lb' ? renderLeaderboard() : ''}
-    ${activeTab==='admin' ? renderAdmin() : ''}
-  `;
+    ${activeTab==='admin' ? renderAdmin() : ''}`;
   checkForWins();
 }
 
 function setTab(t){ activeTab = t; render(); }
 function doLogin(){ login(document.getElementById('nameInput').value); }
 function doAdminLogin(){ tryAdminLogin(document.getElementById('pinInput').value); }
-function placeBetUI(eventId){ placeBet(eventId, drafts[eventId]); }
+function placeBetUI(id){ placeBet(id, drafts[id]); }
 function doAddEvent(){
   addEvent(
     document.getElementById('newEventDesc').value,
@@ -748,24 +716,165 @@ function doAddEvent(){
     document.getElementById('newEventEmoji').value
   );
 }
-async function doResetAll(){
-  if(!confirm('Sicuro di voler azzerare utenti, saldi e scommesse?')) return;
-  state.users = {};
-  await saveState();
-  render();
+
+function diagCard(titolo, causa, cosaFare, dettaglio){
+  return `
+    <header class="top">
+      <div class="brand">
+        <div class="logo">⚠️</div>
+        <div><h1>Sabaudi Bet</h1><p>Diagnostica</p></div>
+      </div>
+    </header>
+    <div class="card setup-card">
+      <h2 style="margin-top:0;">${titolo}</h2>
+      <p style="font-size:14px;"><b>Causa:</b> ${causa}</p>
+      <p style="font-size:14px;"><b>Cosa fare:</b> ${cosaFare}</p>
+      ${dettaglio ? `<p class="hint">Dettaglio tecnico: <code>${String(dettaglio).slice(0,300)}</code></p>` : ''}
+      <p class="hint">URL configurato: <code>${SUPABASE_URL}</code></p>
+    </div>`;
 }
 
-function init(){
-  if(!configReady){
-    render();
+function showDiag(t,c,f,d){ document.getElementById('app').innerHTML = diagCard(t,c,f,d); }
+
+// carica l'SDK da una CDN alternativa se la prima e' bloccata
+function loadScript(src, timeoutMs){
+  return new Promise((ok,ko)=>{
+    let done = false;
+    const s = document.createElement('script');
+    const finish = (fn,arg)=>{ if(!done){ done = true; fn(arg); } };
+    s.src = src;
+    s.onload  = ()=> finish(ok);
+    s.onerror = ()=> finish(ko, new Error('bloccato: '+src));
+    // se la CDN non risponde ne' con successo ne' con errore, non restiamo appesi
+    setTimeout(()=> finish(ko, new Error('timeout: '+src)), timeoutMs || 6000);
+    document.head.appendChild(s);
+  });
+}
+
+// Alcuni ambienti (anteprime in sandbox) non riescono a trasmettere oggetti
+// come Headers o AbortSignal e falliscono con DataCloneError.
+// Questa fetch normalizza tutto in dati semplici prima di inoltrare.
+async function safeFetch(input, init){
+  const url = (typeof input === 'string') ? input
+            : (input && input.url) ? input.url : String(input);
+  const src = init || ((typeof input === 'object' && input) ? input : {});
+  const headers = {};
+  const h = src.headers;
+  if(h){
+    if(typeof h.forEach === 'function' && !Array.isArray(h)){ h.forEach((v,k)=>{ headers[k] = v; }); }
+    else if(Array.isArray(h)){ h.forEach(pair=>{ headers[pair[0]] = pair[1]; }); }
+    else { Object.keys(h).forEach(k=>{ headers[k] = h[k]; }); }
+  }
+  const opts = { method: src.method || 'GET', headers: headers };
+  if(src.body !== undefined && src.body !== null){
+    opts.body = (typeof src.body === 'string') ? src.body : JSON.stringify(src.body);
+  }
+  return fetch(url, opts); // niente signal, niente oggetti Request/Headers
+}
+
+async function ensureSdk(){
+  if(window.supabase && window.supabase.createClient) return true;
+  const mirrors = [
+    'https://unpkg.com/@supabase/supabase-js@2/dist/umd/supabase.js',
+    'https://cdn.skypack.dev/@supabase/supabase-js@2'
+  ];
+  for(const m of mirrors){
+    try{
+      await loadScript(m);
+      if(window.supabase && window.supabase.createClient) return true;
+    }catch(e){ /* provo il prossimo */ }
+  }
+  return false;
+}
+
+async function init(){
+  if(!configReady){ render(); return; }
+  render(); // mostra subito "Caricamento..." invece di una pagina bianca
+
+  // 1) la libreria Supabase e' arrivata?
+  const sdkOk = await ensureSdk();
+  if(!sdkOk){
+    showDiag('Libreria Supabase non caricata',
+      'Il browser non e\' riuscito a scaricare la libreria da internet. Succede tipicamente nelle anteprime che bloccano gli script esterni (come questa dentro Claude), oppure senza connessione.',
+      'Questo NON e\' un problema di URL o chiave. Carica il file su GitHub Pages e aprilo da li\': funzionera\'.');
     return;
   }
+
+  // 2) il client si crea?
   try{
-    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-    startSync();
+    sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+      global: { fetch: safeFetch },
+      auth: { persistSession: false }
+    });
   }catch(e){
-    document.getElementById('app').innerHTML =
-      '<div class="card" style="max-width:480px;margin:40px auto;">Errore nel collegamento a Supabase. Controlla che <code>SUPABASE_URL</code> e <code>SUPABASE_ANON_KEY</code> siano corretti e ricarica la pagina.</div>';
+    showDiag('URL o chiave non validi',
+      'La libreria ha rifiutato i valori di configurazione.',
+      'Ricontrolla SUPABASE_URL (senza /rest/v1/) e la chiave anon in cima al file.', e.message);
+    return;
+  }
+
+  // 3) il database risponde?
+  let probe;
+  try{
+    probe = await sb.from('sabaudi_events').select('id').limit(1);
+  }catch(e){
+    const m = String(e && e.message || e);
+    if(/Load failed|Failed to fetch|NetworkError|ERR_BLOCKED|Content Security Policy|refused to connect/i.test(m)){
+      showDiag('Rete bloccata da questo ambiente',
+        'La richiesta e\' partita verso Supabase ma e\' stata bloccata prima di arrivare. URL, chiave e tabelle non c\'entrano.',
+        'Se sei in un\'anteprima: caricalo su GitHub Pages. Se sei gia\' sul sito pubblicato: controlla la connessione e che il progetto Supabase non sia in pausa.', m);
+    }else if(/DataCloneError|cloned|structuredClone/i.test(m)){
+      showDiag('Anteprima non compatibile',
+        'La configurazione e\' corretta, ma questo ambiente di anteprima non riesce a inoltrare la richiesta di rete (DataCloneError).',
+        'Non c\'e\' niente da correggere nel file. Caricalo su GitHub Pages e aprilo da li\'.', m);
+    }else{
+      showDiag('Nessuna risposta dal database',
+        'La richiesta di rete verso Supabase non e\' andata a buon fine.',
+        'Controlla la connessione. Se sei in un\'anteprima con rete limitata, prova dal sito pubblicato.', m);
+    }
+    return;
+  }
+
+  if(probe.error){
+    const msg = probe.error.message || '';
+    const code = probe.error.code || '';
+    if(code === '42P01' || /does not exist|relation/i.test(msg)){
+      showDiag('Tabelle non trovate',
+        'Il progetto risponde, ma le tabelle sabaudi_* non esistono.',
+        'Esegui lo script SQL di creazione tabelle nell\'SQL Editor di Supabase, poi ricarica.', msg);
+    }else if(/JWT|apikey|Invalid API key|401/i.test(msg + code)){
+      showDiag('Chiave non accettata',
+        'Il progetto risponde ma rifiuta la chiave anon.',
+        'Ricopia la chiave anon da Settings -> API e sostituiscila in cima al file.', msg);
+    }else if(/permission denied|RLS|policy/i.test(msg)){
+      showDiag('Permessi negati',
+        'Le tabelle esistono ma le policy RLS bloccano la lettura.',
+        'Esegui le istruzioni create policy dello script SQL, poi ricarica.', msg);
+    }else if(/Load failed|Failed to fetch|NetworkError|ERR_BLOCKED|Content Security Policy|refused to connect/i.test(msg)){
+      showDiag('Rete bloccata da questo ambiente',
+        'La richiesta e\' partita verso Supabase ma e\' stata bloccata prima di arrivare. URL, chiave e tabelle non c\'entrano: e\' l\'ambiente che non consente la connessione (tipico delle anteprime in sandbox).',
+        'Se sei in un\'anteprima: non c\'e\' niente da correggere, caricalo su GitHub Pages. Se sei gia\' sul sito pubblicato: controlla la connessione e che il progetto Supabase non sia in pausa.', msg);
+    }else if(/DataCloneError|could not be cloned|can not be cloned|structuredClone/i.test(msg)){
+      showDiag('Anteprima non compatibile',
+        'La libreria funziona e la configurazione e\' corretta, ma questo ambiente di anteprima non riesce a inoltrare la richiesta di rete (DataCloneError).',
+        'Non c\'e\' niente da correggere nel file. Caricalo su GitHub Pages e aprilo da li\': funzionera\'.', msg);
+    }else{
+      showDiag('Errore dal database', 'Risposta inattesa da Supabase.',
+        'Vedi il dettaglio qui sotto.', msg + ' ' + code);
+    }
+    return;
+  }
+
+  // 4) tutto ok
+  try{
+    await loadAll();
+    const saved = localStorage.getItem(MY_NAME_KEY);
+    if(saved && players.includes(saved)) currentUser = saved;
+    render();
+    subscribeRealtime();
+  }catch(e){
+    showDiag('Errore nel caricamento dei dati', 'Le tabelle rispondono ma qualcosa e\' andato storto leggendole.',
+      'Vedi il dettaglio qui sotto.', e.message);
   }
 }
 
