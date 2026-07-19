@@ -239,6 +239,25 @@
     font-size:11.5px;overflow-x:auto;line-height:1.6;
   }
   .lb-sub{font-size:11px;color:var(--muted);font-weight:600;margin-top:2px;}
+  .bettors{margin-top:10px;padding-top:9px;border-top:1px dashed var(--border);}
+  .bettors.none{font-size:11.5px;color:var(--muted);font-style:italic;}
+  .bettors-head{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:6px;}
+  .chips{display:flex;flex-wrap:wrap;gap:5px;}
+  .chip{
+    background:#F1E8D2;color:var(--navy);
+    font-size:11.5px;font-weight:600;
+    padding:3px 9px;border-radius:999px;
+    border:1px solid transparent;white-space:nowrap;
+  }
+  .chip b{font-weight:800;}
+  .chip.mine{background:var(--sea);color:#fff;}
+  .chip.won{background:#D4EDDA;color:#155724;}
+  .chip.lost{background:#F1E8D2;color:var(--muted);text-decoration:line-through;}
+  .chip.mine.won{background:#1E7E34;color:#fff;}
+  .chip.mine.lost{background:#E2D8C0;color:var(--muted);}
+  .btn-danger{background:#B02A37;color:#fff;}
+  .btn-danger:hover{background:#8A1F2B;}
+  .resolve-btns button{width:28px;height:28px;font-size:13px;}
   .lb-name{flex:1;font-weight:700;font-size:14px;}
 </style>
 </head>
@@ -293,6 +312,7 @@ let drafts = {};
 let toastTimer = null;
 let sb = null;
 let loaded = false;
+let betInFlight = false;   // impedisce due puntate contemporanee dallo stesso dispositivo
 
 const configReady = !!(SUPABASE_URL && SUPABASE_URL.indexOf('INSERISCI') === -1 &&
                        SUPABASE_ANON_KEY && SUPABASE_ANON_KEY.indexOf('INSERISCI') === -1);
@@ -382,6 +402,11 @@ async function onRemoteChange(){
 async function login(name){
   name = (name||'').trim();
   if(!name) return;
+  if(players.includes(name)){
+    if(!confirm(`Esiste gia' un giocatore di nome "${name}".\n\nSe sei tu, continua: ritroverai il tuo saldo.\nSe sei un'altra persona, annulla e scegli un nome diverso, altrimenti condividerete lo stesso portafoglio.`)){
+      return;
+    }
+  }
   if(!players.includes(name)){
     const { error } = await sb.from('sabaudi_players').insert({ name });
     if(error && error.code !== '23505'){ showToast('Errore iscrizione, riprova.'); return; }
@@ -401,15 +426,40 @@ function logout(){
 }
 
 async function placeBet(eventId, amountRaw){
+  if(betInFlight){ showToast('Attendi, sto salvando la puntata precedente…'); return; }
+  betInFlight = true;
+  try{
+    await placeBetInner(eventId, amountRaw);
+  } finally {
+    betInFlight = false;
+  }
+}
+
+async function placeBetInner(eventId, amountRaw){
   const amount = parseFloat(amountRaw);
   const ev = eventById(eventId);
   if(!ev){ showToast('Scommessa non trovata.'); return; }
   if(!amount || amount <= 0){ showToast('Inserisci un importo valido.'); return; }
   if(ev.resolved !== null){ showToast('Evento già risolto, non puoi più scommettere.'); return; }
 
+  // Rilettura fresca delle PROPRIE puntate: senza questa, la stessa persona
+  // collegata da due dispositivi poteva puntare due volte lo stesso saldo
+  // e finire in negativo.
+  try{
+    const fresh = await sb.from('sabaudi_bets').select('*').eq('player', currentUser);
+    if(!fresh.error && fresh.data){
+      bets = bets.filter(b=>b.player !== currentUser)
+                 .concat(fresh.data.map(b=>({...b, amount: Number(b.amount)})));
+    }
+  }catch(e){ /* se la rilettura fallisce si usa comunque il dato locale */ }
+
   const existing = myBet(eventId);
   const available = balanceOf(currentUser) + (existing ? existing.amount : 0);
-  if(amount > available){ showToast('Sabaudi insufficienti.'); return; }
+  if(amount > available){
+    showToast('Sabaudi insufficienti: ne hai ' + fmt(available) + '.');
+    render();
+    return;
+  }
 
   // scrive SOLO la propria riga → nessun conflitto con gli altri
   const { error } = await sb.from('sabaudi_bets')
@@ -427,7 +477,15 @@ async function placeBet(eventId, amountRaw){
 
 async function updateOdds(eventId, val){
   const odds = parseFloat(val);
-  if(!odds || odds <= 0){ showToast('Quota non valida.'); return; }
+  if(!odds || odds <= 0){ showToast('Quota non valida.'); render(); return; }
+  const evPre = eventById(eventId);
+  if(evPre && evPre.resolved === true){
+    const n = bets.filter(b=>b.event_id === eventId).length;
+    if(!confirm(`Attenzione: "${evPre.descr}" e' gia' stata vinta.\n\nCambiando la quota da ${evPre.odds} a ${fmt(odds)} le vincite gia' accreditate a ${n} persona/e verranno RICALCOLATE.\n\nProcedere?`)){
+      render();
+      return;
+    }
+  }
   const { error } = await sb.from('sabaudi_events').update({ odds: fmt(odds) }).eq('id', eventId);
   if(error){ showToast('Errore nel salvare la quota.'); return; }
   const ev = eventById(eventId);
@@ -442,7 +500,7 @@ async function addEvent(descr, oddsRaw, emojiRaw){
   const odds = parseFloat(oddsRaw);
   if(!odds || odds <= 0){ showToast('Quota non valida.'); return; }
   const emoji = (emojiRaw||'').trim() || '🎲';
-  const id = 'x' + Date.now();
+  const id = 'x' + Date.now() + Math.random().toString(36).slice(2,7);
   const { error } = await sb.from('sabaudi_events')
     .insert({ id, emoji, descr, odds: fmt(odds), resolved: null });
   if(error){ showToast('Errore nel creare la scommessa.'); return; }
@@ -470,6 +528,55 @@ async function deleteEvent(eventId){
   events = events.filter(e=>e.id !== eventId);
   bets = bets.filter(b=>b.event_id !== eventId);
   showToast('Scommessa eliminata.');
+  render();
+}
+
+// Azzera le puntate di UNA sola scommessa: i sabaudi tornano a chi aveva puntato
+// e l'evento si riapre. Le altre scommesse non vengono toccate.
+async function resetEventBets(eventId){
+  const ev = eventById(eventId);
+  if(!ev) return;
+  const n = bets.filter(b=>b.event_id === eventId).length;
+  if(n === 0 && ev.resolved === null){ showToast('Non c\'e\' niente da azzerare qui.'); return; }
+  if(!confirm(`Azzerare "${ev.descr}"?\n\n${n} puntat${n===1?'a':'e'} verranno cancellate, i sabaudi torneranno a chi aveva puntato e la scommessa si riaprira\'.\n\nLe altre scommesse restano invariate.`)) return;
+
+  const del = await sb.from('sabaudi_bets').delete().eq('event_id', eventId);
+  if(del.error){ showToast('Errore nell\'azzerare le puntate.'); return; }
+  await sb.from('sabaudi_events').update({ resolved: null }).eq('id', eventId);
+
+  bets = bets.filter(b=>b.event_id !== eventId);
+  ev.resolved = null;
+  showToast('Scommessa azzerata.');
+  render();
+}
+
+// Azzera TUTTE le puntate: tutti tornano a 1000 sabaudi, tutte le scommesse si riaprono.
+// Iscritti, scommesse e quote restano.
+async function resetAllBets(){
+  const n = bets.length;
+  if(!confirm(`Azzerare TUTTE le puntate?\n\n${n} puntat${n===1?'a':'e'} su ${events.length} scommesse verranno cancellate. Tutti tornano a ${STARTING_BALANCE} sabaudi e ogni scommessa si riapre.\n\nIscritti, testi e quote restano.`)) return;
+
+  const del = await sb.from('sabaudi_bets').delete().neq('player', '\u0000');
+  if(del.error){ showToast('Errore nell\'azzeramento.'); return; }
+  await sb.from('sabaudi_events').update({ resolved: null }).neq('id', '\u0000');
+
+  bets = [];
+  events.forEach(e=>{ e.resolved = null; });
+  showToast('Tutte le puntate azzerate.');
+  render();
+}
+
+// Ripartenza totale: cancella anche gli iscritti.
+async function resetEverything(){
+  if(!confirm('RIPARTENZA TOTALE\n\nVerranno cancellati tutti gli iscritti e tutte le puntate. Le scommesse e le quote restano.\n\nOgnuno dovra\' reiscriversi col proprio nome. Procedere?')) return;
+  await sb.from('sabaudi_bets').delete().neq('player', '\u0000');
+  await sb.from('sabaudi_players').delete().neq('name', '\u0000');
+  await sb.from('sabaudi_events').update({ resolved: null }).neq('id', '\u0000');
+  bets = []; players = [];
+  events.forEach(e=>{ e.resolved = null; });
+  currentUser = null;
+  try{ localStorage.removeItem(MY_NAME_KEY); }catch(e){}
+  showToast('Tutto azzerato.');
   render();
 }
 
@@ -554,6 +661,30 @@ function statusBadge(ev){
   return '<span class="status aperta">aperta</span>';
 }
 
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));
+}
+
+// Elenco pubblico di chi ha puntato su un evento, ordinato dalla puntata piu' alta
+function bettorsLine(ev){
+  const list = bets.filter(b=>b.event_id === ev.id).sort((a,b)=> b.amount - a.amount);
+  if(list.length === 0) return '<div class="bettors none">Nessuno ha ancora puntato</div>';
+  const chips = list.map(b=>{
+    const mine = b.player === currentUser;
+    let cls = 'chip';
+    if(mine) cls += ' mine';
+    if(ev.resolved === true) cls += ' won';
+    else if(ev.resolved === false) cls += ' lost';
+    const suffix = ev.resolved === true ? ' → +' + fmt(b.amount*ev.odds) : '';
+    return `<span class="${cls}">${escapeHtml(b.player)} <b>${b.amount}</b>${suffix}</span>`;
+  }).join('');
+  const tot = fmt(list.reduce((s,b)=>s+b.amount,0));
+  return `<div class="bettors">
+      <div class="bettors-head">${list.length} puntat${list.length===1?'a':'e'} · ${tot} sabaudi in gioco</div>
+      <div class="chips">${chips}</div>
+    </div>`;
+}
+
 function renderBetTab(){
   if(events.length === 0) return '<div class="empty">Nessuna scommessa ancora. L\'admin può aggiungerne dal pannello.</div>';
   const rows = events.map(ev=>{
@@ -584,6 +715,7 @@ function renderBetTab(){
             <button class="btn btn-sea btn-small" onclick="placeBetUI('${ev.id}')">${bet?'Aggiorna':'Scommetti'}</button>
           </div>` : ''}
           ${betInfo}
+          ${bettorsLine(ev)}
         </div>
       </div>`;
   }).join('');
@@ -635,7 +767,8 @@ function renderAdmin(){
       <div class="resolve-btns">
         <button title="Successo" class="${ev.resolved===true?'on-yes':''}" onclick="resolveEvent('${ev.id}', true)">✓</button>
         <button title="Non successo" class="${ev.resolved===false?'on-no':''}" onclick="resolveEvent('${ev.id}', false)">✗</button>
-        <button title="Elimina" onclick="deleteEvent('${ev.id}')">🗑</button>
+        <button title="Azzera le puntate di questa scommessa" onclick="resetEventBets('${ev.id}')">↺</button>
+        <button title="Elimina la scommessa" onclick="deleteEvent('${ev.id}')">🗑</button>
       </div>
     </div>`;
   }).join('');
@@ -653,6 +786,25 @@ function renderAdmin(){
         <button class="btn btn-sea" onclick="doAddEvent()">Aggiungi</button>
       </div>
       <p class="hint">Appare subito sul telefono di tutti.</p>
+    </div>
+
+    <div class="section-title">Azzeramenti</div>
+    <div class="card">
+      <p class="hint" style="margin-top:0;margin-bottom:12px;">
+        Per azzerare <b>una sola</b> scommessa usa il pulsante ↺ nella riga corrispondente qui sopra.
+      </p>
+      <button class="btn btn-ghost" style="width:100%;margin-bottom:10px;" onclick="resetAllBets()">
+        Azzera tutte le puntate
+      </button>
+      <p class="hint" style="margin-top:0;margin-bottom:16px;">
+        Tutti tornano a ${STARTING_BALANCE} sabaudi e ogni scommessa si riapre. Iscritti, testi e quote restano.
+      </p>
+      <button class="btn btn-danger" style="width:100%;" onclick="resetEverything()">
+        Ripartenza totale
+      </button>
+      <p class="hint" style="margin-top:6px;">
+        Come sopra, ma cancella anche gli iscritti: ognuno dovrà rientrare col proprio nome.
+      </p>
     </div>`;
 }
 
