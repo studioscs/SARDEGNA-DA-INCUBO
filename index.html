@@ -722,26 +722,37 @@ function renderBetTab(){
   return `<div class="section-title">Eventi</div>${rows}`;
 }
 
+function allPlayerNames(){
+  // Unione tra chi risulta iscritto E chiunque abbia almeno una puntata:
+  // cosi' nessuno che scommette puo' restare fuori dalla classifica,
+  // anche se la sua iscrizione non fosse stata registrata.
+  const set = new Set(players);
+  bets.forEach(b=> set.add(b.player));
+  if(currentUser) set.add(currentUser);
+  return Array.from(set);
+}
+
 function renderLeaderboard(){
-  if(players.length === 0) return '<div class="empty">Ancora nessun iscritto.</div>';
-  const list = players.map(n=>({
+  const names = allPlayerNames();
+  if(names.length === 0) return '<div class="empty">Ancora nessun iscritto.</div>';
+  const list = names.map(n=>({
     name: n,
     balance: balanceOf(n),
     staked: stakedOf(n),
     open: betsOf(n).filter(b=>{const e=eventById(b.event_id); return e && e.resolved===null;}).length
-  })).sort((a,b)=> (b.balance+b.staked) - (a.balance+a.staked));
+  })).sort((a,b)=> b.balance - a.balance || a.name.localeCompare(b.name));
   const medals = ['🥇','🥈','🥉'];
   const rows = list.map((u,i)=>`
     <div class="lb-row">
       <div class="lb-rank ${i<3?'gold':''}">${medals[i] || (i+1)}</div>
       <div class="lb-name">
-        ${u.name}${u.name===currentUser?' (tu)':''}
-        ${u.staked>0?`<div class="lb-sub">${u.staked} in gioco su ${u.open} scommess${u.open===1?'a':'e'}</div>`:''}
+        ${escapeHtml(u.name)}${u.name===currentUser?' (tu)':''}
+        ${u.staked>0?`<div class="lb-sub">${u.staked} ancora in gioco su ${u.open} scommess${u.open===1?'a':'e'}</div>`:''}
       </div>
       <div class="lb-balance">${u.balance} SAB</div>
     </div>`).join('');
   return `<div class="card">${rows}</div>
-    <p class="hint" style="text-align:center;">Ordinati per patrimonio totale (saldo + sabaudi ancora in gioco).</p>`;
+    <p class="hint" style="text-align:center;">Classifica per sabaudi disponibili. I sabaudi puntati su scommesse ancora aperte non contano finché non si risolvono.</p>`;
 }
 
 function renderAdmin(){
