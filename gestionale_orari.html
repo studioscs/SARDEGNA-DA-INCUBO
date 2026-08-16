@@ -344,20 +344,17 @@ textarea.form-control{resize:vertical;min-height:64px}
       <div class="info-box mb-16">
         <strong>Regole applicate automaticamente:</strong>
         <ul style="margin-top:6px;padding-left:18px;line-height:1.9;font-size:12px">
-          <li><strong>Priorità 1 — Profumeria su TUTTI i giorni</strong>: prima si mettono a copertura di ogni giornata di apertura le esperte di profumeria, poi si completa la copertura con gli altri dipendenti</li>
-          <li><strong>Priorità 2 — Copertura settimana completa</strong> (inclusa domenica) per tutti i giorni di apertura</li>
-          <li><strong>Turni variati</strong>: nessuno fa tutte mattine o tutti pomeriggi — mattina e pomeriggio si alternano tra i dipendenti giorno per giorno</li>
-          <li><strong>Priorità 3 — Contemporaneità per area</strong>: Magazzino-Vendita è sacrificabile in caso di carenza personale</li>
-          <li><strong>Domenica: esattamente 3 persone</strong>, giornata piena nel rispetto dell'orario del negozio (se la domenica ha la pausa pranzo vengono creati due turni, mattina e pomeriggio), a rotazione settimanale — non sempre le stesse 3</li>
-          <li><strong>Riposo settimanale: un solo giorno</strong> — chi non lavora la domenica riposa <strong>di domenica</strong>; chi è in turno la domenica riposa in un altro giorno (lun–sab)</li>
-          <li>Chi inizia alle 07:00 (camion) deve fare <strong>almeno fino alle 11:00</strong> (min. 4h)</li>
-          <li><strong>Nessuna giornata intera senza turno</strong>: il riposo è l'unico giorno non lavorato della settimana. Se le ore contrattuali sono esaurite, le ore vengono ridistribuite dai giorni più carichi per garantire la presenza in tutti gli altri giorni</li>
-          <li>Turno minimo: <strong>4 ore</strong> (ridotto a <strong>2 ore</strong> solo quando serve a coprire una giornata che resterebbe senza turno)</li>
-          <li>Turno spezzato: max 6h consecutive, poi pausa obbligatoria ≥ 2h</li>
-          <li>Rispetto ore contrattuali settimanali</li>
-          <li>Se le ore contrattuali non bastano a coprire la settimana → <strong>straordinari distribuiti equamente</strong> e segnalati in arancione</li>
-          <li>Specializzato profumeria → assegnato prioritariamente in Profumeria</li>
-          <li>Periodi ferie rispettati automaticamente</li>
+          <li><strong>1 solo giorno di riposo</strong> a settimana: chi non lavora la domenica riposa <strong>di domenica</strong>, chi è in turno la domenica riposa un giorno tra lunedì e sabato</li>
+          <li><strong>Nessuna giornata intera senza turno</strong> oltre al riposo: in tutti gli altri giorni di apertura il dipendente è in turno (almeno 2 ore)</li>
+          <li><strong>Priorità profumeria</strong>: ogni giornata di apertura viene coperta per prima dalle esperte di profumeria, poi dagli altri dipendenti</li>
+          <li><strong>Turni variati</strong>: mattina e pomeriggio si alternano, nessuno fa sempre la stessa fascia</li>
+          <li><strong>Domenica: 3 persone</strong>, giornata piena nel rispetto dell'orario del negozio (due turni se c'è la pausa pranzo), a rotazione settimanale</li>
+          <li>Turni sempre <strong>dentro l'orario del negozio</strong>, mai a cavallo della pausa pranzo</li>
+          <li>Massimo <strong>8 ore al giorno</strong> e <strong>6 ore consecutive</strong>, poi pausa di almeno 2 ore</li>
+          <li>Chi riceve il camion entra alle <strong>07:00</strong> e resta almeno fino alle 11:00</li>
+          <li>Ore contrattuali come obiettivo: si aggiungono o si accorciano turni per avvicinarsi al contratto, senza violare le regole sopra — le ore mancanti o gli straordinari vengono segnalati</li>
+          <li>Ferie, permessi e assenze rispettati automaticamente</li>
+          <li>Il direttore copre le fasce scoperte (max 3h al giorno, mai di domenica)</li>
         </ul>
       </div>
 
@@ -890,1517 +887,560 @@ function setWeekFromPicker(v){
   save();updateWeekDisplay();
 }
 
-/* ═══════════════ RIPOSO SETTIMANALE — REGOLA UNICA ═══════════════ */
-// Un dipendente fa UN SOLO giorno di riposo a settimana:
-//  • se NON è in turno la domenica (e il negozio è aperto) → il riposo è la domenica;
-//  • se lavora la domenica → il riposo è un giorno lun–sab.
-// Mai due giorni di riposo. Questa funzione è la fonte di verità: viene applicata alla
-// generazione, alla rigenerazione del singolo dipendente, alle modifiche manuali e agli
-// orari già salvati. `keep` indica un giorno scelto a mano da preferire.
-// Ritorna il giorno di riposo assegnato (o null se non è stato possibile assegnarlo).
+
+/* ═══════════════ RIPOSO UNICO — usato dalle modifiche manuali ═══════════════ */
+// Dopo una modifica a mano garantisce che resti UN solo giorno senza turni
+// (il riposo), collocato secondo la regola: domenica per chi non lavora la
+// domenica, un giorno lun-sab per chi la lavora.
 function enforceSingleRest(days,empId,keep,weekStartISO){
   if(!days)return null;
   const openDays=DAYS_KEY.filter(k=>S.storeHours[k]&&S.storeHours[k].open&&days[k]);
   if(!openDays.length)return null;
-  const hasRest =k=>days[k]&&(days[k].dayOff||[]).includes(empId);
-  const hasShift=k=>days[k]&&(days[k].shifts||[]).some(s=>s.employeeId===empId);
-  // Un giorno di assenza/permesso/ferie non è un riposo: se conosciamo la settimana,
-  // il riposo viene collocato preferibilmente su un giorno effettivamente disponibile.
-  const empR=getEmp(empId);
-  const assente=k=>{
-    if(!weekStartISO||!empR)return false;
-    const d=isoDate(addDays(new Date(weekStartISO+'T00:00:00'),DAYS_KEY.indexOf(k)));
-    return (empR.daysOff||[]).includes(d)||(empR.permissionDays||[]).includes(d)||isOnVacationDay(empR,d);
-  };
-  const weekPool=openDays.filter(k=>k!=='sun');
-  const sundayOpen=openDays.includes('sun');
+  const haTurni=k=>(days[k].shifts||[]).some(s=>s.employeeId===empId);
+  const pulisci=k=>{days[k].dayOff=(days[k].dayOff||[]).filter(id=>id!==empId)};
+  const feriali=openDays.filter(k=>k!=='sun');
   let rest=null;
-  if(keep&&openDays.includes(keep)&&!hasShift(keep)){
-    rest=keep;                                   // riposo scelto manualmente
-  } else if(sundayOpen&&!hasShift('sun')){
-    rest='sun';                                  // non lavora la domenica → riposa la domenica
-  } else {
-    // lavora la domenica (o domenica chiusa): un solo riposo tra i giorni feriali aperti
-    const pool=weekPool.length?weekPool:openDays;
-    rest=pool.find(k=>hasRest(k)&&!hasShift(k)&&!assente(k))
-       ||pool.find(k=>!hasShift(k)&&!assente(k))
-       ||pool.find(k=>hasRest(k)&&!hasShift(k))
-       ||pool.find(k=>!hasShift(k))||null;
-    // Nessun giorno libero: il riposo settimanale è comunque obbligatorio → si libera
-    // la giornata meno carica togliendo i turni del dipendente.
-    if(!rest){
-      const dayH=k=>days[k].shifts.filter(x=>x.employeeId===empId).reduce((a2,x)=>a2+(x.hours||0),0);
-      const libera=pool.filter(k=>!assente(k)).sort((a2,b2)=>dayH(a2)-dayH(b2))[0]
-                 ||pool.slice().sort((a2,b2)=>dayH(a2)-dayH(b2))[0];
-      if(libera){
-        days[libera].shifts=days[libera].shifts.filter(x=>x.employeeId!==empId);
-        rest=libera;
-      }
-    }
-  }
-  openDays.forEach(k=>{
-    if(k===rest)return;
-    days[k].dayOff=(days[k].dayOff||[]).filter(id=>id!==empId);
-  });
+  if(keep&&openDays.includes(keep)&&!haTurni(keep))rest=keep;
+  else if(openDays.includes('sun')&&!haTurni('sun'))rest='sun';
+  else rest=(feriali.length?feriali:openDays).find(k=>!haTurni(k))||null;
+  openDays.forEach(k=>{if(k!==rest)pulisci(k)});
   if(rest&&!days[rest].dayOff.includes(empId))days[rest].dayOff.push(empId);
   return rest;
 }
 
-/* ═══════════════ SCHEDULE GENERATION CORE ═══════════════ */
-// restHistory: {empId: dayKey} — last rest day each employee had (for rotation)
-// weekIndex: 0-based index of this week in the generation batch (for biweekly A/B)
-function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=0){
-  const weekStart=new Date(weekStartISO+'T00:00:00');
-  const avail=S.employees.filter(e=>!isOnVacation(e,weekStartISO));
+/* ═══════════════════════════════════════════════════════════════════
+   MOTORE DI GENERAZIONE ORARI — v2 (modello a FASCE)
+   ═══════════════════════════════════════════════════════════════════
+   Il motore assegna FASCE (mattina / pomeriggio), non intervalli liberi.
+   Le regole sono garantite per costruzione, non corrette a posteriori:
 
+   R1  Un solo giorno di riposo a settimana per dipendente.
+       Chi non lavora la domenica riposa DI domenica; chi lavora la
+       domenica riposa in un giorno lun–sab.
+   R2  Nessuna giornata intera senza turno: ogni giorno di apertura che
+       non sia il riposo (o un'assenza) ha almeno una fascia.
+   R3  I turni stanno sempre dentro l'orario del negozio e non
+       attraversano mai la pausa pranzo.
+   R4  Priorità profumeria: ogni giornata di apertura è coperta da
+       un'esperta di profumeria, se disponibile.
+   R5  Turni variati: mattina e pomeriggio si alternano, nessuno fa
+       sempre la stessa fascia.
+   R6  Domenica: 3 persone, giornata piena secondo l'orario del negozio.
+   R7  Le ore contrattuali sono un obiettivo: si aggiungono o si
+       accorciano fasce per avvicinarsi al contratto. Non possono
+       violare R1–R3.
+   ═══════════════════════════════════════════════════════════════════ */
+
+const MIN_FASCIA_H = 2;   // durata minima di una fascia assegnata (ore)
+const SUN_WORKERS  = 3;   // persone in turno la domenica
+
+/* Fasce di un giorno: [{id:'M'|'P', s:minuti, e:minuti}] ------------- */
+function fasceDelGiorno(dayKey){
+  const sh = S.storeHours[dayKey];
+  if(!sh || !sh.open) return [];
+  if(sh.type === 'split'){
+    return [{id:'M', s:t2m(sh.ms), e:t2m(sh.me)}, {id:'P', s:t2m(sh.as), e:t2m(sh.ae)}]
+           .filter(f => f.e > f.s);
+  }
+  // orario continuato: si divide a metà (arrotondata alla mezz'ora) così
+  // l'alternanza mattina/pomeriggio resta possibile; le due fasce sono
+  // contigue e vengono unite in un unico turno se assegnate entrambe.
+  const o = t2m(sh.ms), c = t2m(sh.ae);
+  if(c - o <= 0) return [];
+  const mid = o + Math.round((c - o) / 2 / 30) * 30;
+  if(mid <= o || mid >= c) return [{id:'M', s:o, e:c}];
+  return [{id:'M', s:o, e:mid}, {id:'P', s:mid, e:c}];
+}
+
+function assente(emp, dateISO){
+  return (emp.daysOff||[]).includes(dateISO)
+      || (emp.permissionDays||[]).includes(dateISO)
+      || isOnVacationDay(emp, dateISO);
+}
+
+function isMagazzino(a){ return a.name.toLowerCase().includes('magazzino') }
+function isProfArea(a){ return a.name.toLowerCase().includes('profumeria') }
+
+/* ═══════════════════════════════════════════════════════════════════
+   generateWeekSchedule — genera l'orario di UNA settimana
+   restHistory: memoria tra settimane { empId: giornoRiposo,
+                 'sun_'+empId: indice ultima domenica lavorata }
+   ═══════════════════════════════════════════════════════════════════ */
+function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=0){
+  const weekStart = new Date(weekStartISO+'T00:00:00');
+  const dateOf    = k => isoDate(addDays(weekStart, DAYS_KEY.indexOf(k)));
+  const nomeGiorno= k => DAYS_FULL[DAYS_KEY.indexOf(k)];
+
+  const sch = {weekStart:weekStartISO, days:{}};
+  DAYS_KEY.forEach(k => { sch.days[k] = {shifts:[], dayOff:[]} });
+
+  const openDays = DAYS_KEY.filter(k => S.storeHours[k] && S.storeHours[k].open);
+  const feriali  = openDays.filter(k => k !== 'sun');
+  const sundayOpen = openDays.includes('sun');
+
+  const avail = S.employees.filter(e => !isOnVacation(e, weekStartISO));
   if(!avail.length){
     warnings.push(`Settimana ${weekRange(weekStartISO)}: nessun dipendente disponibile (tutti in ferie).`);
-    return {weekStart:weekStartISO,days:{}};
+    return {weekStart:weekStartISO, days:sch.days, worked:{}, overtimeH:{}};
   }
 
-  const sch={weekStart:weekStartISO,days:{}};
-  DAYS_KEY.forEach(k=>{sch.days[k]={shifts:[],dayOff:[]}});
+  const fissi   = avail.filter(e => e.hoursType === 'fixed' && !e.isDirectore);
+  const direttori = avail.filter(e => e.isDirectore);
+  const flex    = avail.filter(e => e.hoursType !== 'fixed' && !e.isDirectore);
 
-  const worked={};        // ore lavorate correnti per dipendente
-  const overtimeH={};     // ore straordinarie per dipendente (inizia a 0)
-  avail.forEach(e=>{worked[e.id]=0;overtimeH[e.id]=0});
+  const worked    = {}; avail.forEach(e => worked[e.id] = 0);
+  const overtimeH = {}; avail.forEach(e => overtimeH[e.id] = 0);
 
-  const openDays=DAYS_KEY.filter(k=>S.storeHours[k]&&S.storeHours[k].open);
+  // Giorni di chiusura: segnati per tutti (in tabella appaiono come "Chiuso")
+  DAYS_KEY.filter(k => !openDays.includes(k))
+          .forEach(k => avail.forEach(e => sch.days[k].dayOff.push(e.id)));
 
-  // Mark closed days for everyone
-  DAYS_KEY.filter(k=>!S.storeHours[k]||!S.storeHours[k].open).forEach(ck=>{
-    avail.forEach(e=>{if(!sch.days[ck].dayOff.includes(e.id))sch.days[ck].dayOff.push(e.id)});
-  });
+  if(!openDays.length){
+    warnings.push(`Settimana ${weekRange(weekStartISO)}: negozio chiuso tutti i giorni.`);
+    return {weekStart:weekStartISO, days:sch.days, worked, overtimeH};
+  }
 
-  // Fixed schedule employees — support biweekly A/B
-  const fixedEmps=avail.filter(e=>e.hoursType==='fixed'||e.isDirectore);
-  const flexEmps =avail.filter(e=>e.hoursType!=='fixed'&&!e.isDirectore);
+  /* ── assegnazioni: mappa empId → { dayKey: [fasce] } ─────────────── */
+  const A = {}; avail.forEach(e => A[e.id] = {});
+  const fasceDi = (id, k) => (A[id][k] || []);
+  const occupa  = (id, k, f) => { (A[id][k] = A[id][k] || []).push(f) };
+  const presenti = (k, fid) => avail.filter(e => fasceDi(e.id, k).some(f => f.id === fid)).length;
+  const capienza = S.maxConcurrentTotal || 99;
 
-  // ── PASSO 0: PREFERENZE DIPENDENTI ──
-  // I dipendenti possono indicare una data specifica (all'interno della settimana da
-  // generare) in cui preferiscono lavorare al mattino o al pomeriggio. Il sistema tenta
-  // di accontentarle nei limiti dei vincoli operativi (orari negozio, ferie/assenze, ore
-  // consecutive, turno minimo); se non è possibile la preferenza viene ignorata e
-  // segnalata negli avvisi. Si applica solo ai dipendenti flex.
-  const prefWorkDayMap={};      // empId -> giorno in cui è stato pre-assegnato un turno preferito
-  const prefWorkSundaySet=new Set(); // empId con preferenza che cade di domenica
-  const weekEndISO=isoDate(addDays(weekStart,6));
-  flexEmps.forEach(emp=>{
-    const pref=(emp.datePreferences||[]).find(p=>p.date>=weekStartISO&&p.date<=weekEndISO);
-    if(!pref)return;
-    const dIdx=(new Date(pref.date+'T00:00:00').getDay()+6)%7; // 0=lun..6=dom
-    const dayKey=DAYS_KEY[dIdx];
-    if(dayKey==='sun'){prefWorkSundaySet.add(emp.id);return}
-
-    // Pre-assegna PRIMA della copertura automatica, così l'algoritmo tiene già conto
-    // di queste ore nel bilancio del dipendente.
-    if(!openDays.includes(dayKey)){
-      warnings.push(`⭐ Preferenza ${emp.name} (${fmtShort(new Date(pref.date+'T00:00:00'))}): negozio chiuso, non applicata.`);
-      return;
-    }
-    if((emp.daysOff||[]).includes(pref.date)||(emp.permissionDays||[]).includes(pref.date)||isOnVacationDay(emp,pref.date)){
-      warnings.push(`⭐ Preferenza ${emp.name} (${fmtShort(new Date(pref.date+'T00:00:00'))}): assente quel giorno, non applicata.`);
-      return;
-    }
-    const sh0=S.storeHours[dayKey];
-    if(!sh0||!sh0.open)return;
-    // Determina l'intervallo mattina/pomeriggio in base al tipo di orario del negozio
-    let reqS,reqE;
-    if(sh0.type==='split'){
-      if(pref.slot==='afternoon'){reqS=t2m(sh0.as);reqE=t2m(sh0.ae);}
-      else{reqS=t2m(sh0.ms);reqE=t2m(sh0.me);}
-    } else {
-      const openM=t2m(sh0.ms),closeM=t2m(sh0.ae);const mid=openM+Math.round((closeM-openM)/2);
-      if(pref.slot==='afternoon'){reqS=mid;reqE=closeM;}
-      else{reqS=openM;reqE=mid;}
-    }
-    const periods=sh0.type==='split'?[[t2m(sh0.ms),t2m(sh0.me)],[t2m(sh0.as),t2m(sh0.ae)]]:[[t2m(sh0.ms),t2m(sh0.ae)]];
-    const maxHp=empMaxH(emp);
-    let placed=false;
-    for(const [pS,pE] of periods){
-      if(maxHp>0&&(worked[emp.id]||0)>=maxHp-0.1)break;
-      const s=Math.max(pS,reqS), e=Math.min(pE,reqE);
-      if(e-s<MIN_SHIFT_M)continue;
-      let durM=Math.min(e-s,6*60); // rispetta il max 6h consecutive
-      if(maxHp>0){const remainM=Math.round((maxHp-(worked[emp.id]||0))*60);durM=Math.min(durM,Math.max(remainM,0));}
-      if(durM<MIN_SHIFT_M)continue;
-      const endM=s+durM;
-      if(S.maxConcurrentTotal){
-        const conc=sch.days[dayKey].shifts.filter(x=>t2m(x.startTime)<=s&&t2m(x.endTime)>s).length;
-        if(conc>=S.maxConcurrentTotal)continue;
-      }
-      const areaCnt={};S.areas.forEach(a=>{areaCnt[a.id]=sch.days[dayKey].shifts.filter(x=>x.areaId===a.id).length});
-      let aId='';
-      if(emp.isProfumeria){const pA=S.areas.find(a=>a.name.toLowerCase().includes('profumeria'));if(pA)aId=pA.id}
-      if(!aId){const free=S.areas.find(a=>!areaCnt[a.id]);aId=free?free.id:(S.areas[0]||{id:''}).id}
-      const h=shiftH(m2t(s),m2t(endM));
-      sch.days[dayKey].shifts.push({employeeId:emp.id,startTime:m2t(s),endTime:m2t(endM),areaId:aId,hours:h,preferred:true});
-      worked[emp.id]=(worked[emp.id]||0)+h;
-      placed=true;
-    }
-    if(placed)prefWorkDayMap[emp.id]=dayKey;
-    else warnings.push(`⭐ Preferenza ${emp.name} (${fmtShort(new Date(pref.date+'T00:00:00'))} ${pref.slot==='afternoon'?'pomeriggio':'mattina'}): non compatibile con l'orario negozio, non applicata.`);
-  });
-
-  fixedEmps.forEach(emp=>{
-    const hasBiweekly=emp.fixedScheduleB&&emp.fixedScheduleB.length>0;
-    let activeSchedule=emp.fixedSchedule||[];
-    if(hasBiweekly){
-      const startOffset=emp.biweeklyFirstWeek==='B'?1:0;
-      const useB=(weekIndex+startOffset)%2===1;
-      if(useB)activeSchedule=emp.fixedScheduleB;
-    }
-    const effectiveSchedule=emp.isDirectore?activeSchedule.filter(fs=>fs.day!=='sun'):activeSchedule;
-    effectiveSchedule.forEach(fs=>{
-      const dk=fs.day;
-      if(!sch.days[dk]||!S.storeHours[dk]||!S.storeHours[dk].open)return;
-      if(fs.type==='split'&&fs.startTime2&&fs.endTime2){
-        // Turno spezzato: due shift separati
-        const h1=shiftH(fs.startTime,fs.endTime);
-        const h2=shiftH(fs.startTime2,fs.endTime2);
-        sch.days[dk].shifts.push({employeeId:emp.id,startTime:fs.startTime,endTime:fs.endTime,areaId:fs.areaId||'',hours:h1});
-        sch.days[dk].shifts.push({employeeId:emp.id,startTime:fs.startTime2,endTime:fs.endTime2,areaId:fs.areaId2||fs.areaId||'',hours:h2});
-        worked[emp.id]=(worked[emp.id]||0)+h1+h2;
-      } else {
-        // Turno continuato (o legacy senza tipo)
-        const h=shiftH(fs.startTime,fs.endTime);
-        sch.days[dk].shifts.push({employeeId:emp.id,startTime:fs.startTime,endTime:fs.endTime,areaId:fs.areaId||'',hours:h});
-        worked[emp.id]=(worked[emp.id]||0)+h;
-      }
+  /* ═══ 1. ORARI FISSI ═══════════════════════════════════════════════
+     I dipendenti a orario fisso hanno turni definiti in scheda: si
+     inseriscono così come sono (supporto settimana A/B).            */
+  const turniFissi = {};   // empId → { dayKey: [{s,e,areaId}] }
+  [...fissi, ...direttori].forEach(emp => {
+    const hasB = emp.fixedScheduleB && emp.fixedScheduleB.length > 0;
+    let sched = emp.fixedSchedule || [];
+    if(hasB && (weekIndex + (emp.biweeklyFirstWeek === 'B' ? 1 : 0)) % 2 === 1) sched = emp.fixedScheduleB;
+    if(emp.isDirectore) sched = sched.filter(fs => fs.day !== 'sun');
+    turniFissi[emp.id] = {};
+    sched.forEach(fs => {
+      if(!openDays.includes(fs.day)) return;
+      if(assente(emp, dateOf(fs.day))) return;
+      const list = turniFissi[emp.id][fs.day] = turniFissi[emp.id][fs.day] || [];
+      list.push({s:t2m(fs.startTime), e:t2m(fs.endTime), areaId:fs.areaId||''});
+      if(fs.type === 'split' && fs.startTime2 && fs.endTime2)
+        list.push({s:t2m(fs.startTime2), e:t2m(fs.endTime2), areaId:fs.areaId2||fs.areaId||''});
     });
-    const workedDays=[...new Set(effectiveSchedule.map(fs=>fs.day))];
-    const lastRest=restHistory[emp.id];
-    let restDay;
-    // Riposo settimanale: UN solo giorno. Se il negozio è aperto la domenica e il
-    // dipendente NON lavora la domenica, il riposo è obbligatoriamente la domenica;
-    // chi lavora la domenica riposa in un altro giorno (lun–sab).
-    if(openDays.includes('sun')&&(emp.isDirectore||!workedDays.includes('sun'))){
-      restDay='sun';
-    } else {
-      const weekPool=openDays.filter(d=>d!=='sun');
-      restDay=weekPool.find(d=>!workedDays.includes(d)&&d!==lastRest)
-            ||weekPool.find(d=>!workedDays.includes(d))
-            ||openDays.find(d=>!workedDays.includes(d));
-    }
-    if(restDay&&!sch.days[restDay].dayOff.includes(emp.id))sch.days[restDay].dayOff.push(emp.id);
   });
+  const lavoraFisso = (id, k) => !!(turniFissi[id] && turniFissi[id][k] && turniFissi[id][k].length);
 
-  // ── DOMENICA: sempre 3 persone totali ──
-  // Regola:
-  //  - Se ci sono dipendenti fissi con turno domenica → flex aggiuntivi = 3 - fissi
-  //    (il fisso copre il suo orario parziale; i flex coprono tutta la giornata)
-  //  - Se nessun fisso domenica → 3 flex con turno completo
-  //  - Mai meno di 3 persone domenica (salvo carenza reale di personale)
-  //  - I flex domenica fanno sempre turno completo apertura→chiusura
-  //  - Rotazione settimanale tra i flex
-  const SUN_WORKERS_TOTAL=3;
-  const sunWorkerIds=new Set();
-  const sundayOpen=openDays.includes('sun')&&S.storeHours['sun']&&S.storeHours['sun'].open;
-  let fixedSunCount=0; // dichiarata qui per essere accessibile nel loop openDays
-
+  /* ═══ 2. DOMENICA: chi lavora ═════════════════════════════════════ */
+  const sunWorkers = new Set();
   if(sundayOpen){
-    const sunDate=isoDate(addDays(weekStart,6));
+    const sunDate = dateOf('sun');
+    fissi.forEach(e => { if(lavoraFisso(e.id,'sun')) sunWorkers.add(e.id) });
 
-    const fixedSunWorkers=fixedEmps.filter(emp=>{
-      if(isOnVacation(emp,weekStartISO))return false;
-      if((emp.daysOff||[]).includes(sunDate))return false;
-      if((emp.permissionDays||[]).includes(sunDate))return false;
-      const hasBiweekly=emp.fixedScheduleB&&emp.fixedScheduleB.length>0;
-      let activeSch=emp.fixedSchedule||[];
-      if(hasBiweekly){
-        const startOffset=emp.biweeklyFirstWeek==='B'?1:0;
-        if((weekIndex+startOffset)%2===1)activeSch=emp.fixedScheduleB;
-      }
-      return activeSch.some(fs=>fs.day==='sun');
+    const candidati = flex.filter(e => !assente(e, sunDate));
+    // rotazione: chi ha lavorato domenica meno di recente passa avanti
+    const ordinati = [...candidati].sort((a,b) => {
+      const pa = (a.datePreferences||[]).some(p => p.date === sunDate) ? -1 : 0;
+      const pb = (b.datePreferences||[]).some(p => p.date === sunDate) ? -1 : 0;
+      if(pa !== pb) return pa - pb;
+      const la = restHistory['sun_'+a.id] ?? -1, lb = restHistory['sun_'+b.id] ?? -1;
+      if(la !== lb) return la - lb;
+      return candidati.indexOf(a) - candidati.indexOf(b);
     });
-    fixedSunCount=fixedSunWorkers.length;
-    const flexNeeded=Math.max(0,SUN_WORKERS_TOTAL-fixedSunCount);
-
-    // Candidati flex domenica
-    const sunCandidates=flexEmps.filter(emp=>{
-      if(emp.isDirectore)return false;
-      if((emp.daysOff||[]).includes(sunDate))return false;
-      if((emp.permissionDays||[]).includes(sunDate))return false;
-      if(isOnVacationDay(emp,sunDate))return false; // ferie quel giorno
-      return true;
-    });
-
-    // Rotazione: penalizza chi ha lavorato domenica più di recente
-    // + boost preferenza: chi ha indicato di preferire lavorare quella domenica va avanti
-    const sorted=[...sunCandidates].sort((a,b)=>{
-      const boostA=prefWorkSundaySet.has(a.id)?-1000:0;
-      const boostB=prefWorkSundaySet.has(b.id)?-1000:0;
-      if(boostA!==boostB)return boostA-boostB;
-      const lastA=restHistory['sun_'+a.id]||(-1);
-      const lastB=restHistory['sun_'+b.id]||(-1);
-      if(lastA!==lastB)return lastA-lastB;
-      return sunCandidates.indexOf(a)-sunCandidates.indexOf(b);
-    });
-
-    // Prendi i primi flexNeeded — ma garantendo almeno un'esperta profumeria
-    // (priorità profumeria: tutti i giorni di apertura, domenica inclusa)
-    const chosen=[];
-    const profSunAlready=fixedSunWorkers.some(e=>e.isProfumeria);
-    if(!profSunAlready){
-      const profSun=sorted.find(e=>e.isProfumeria);
-      if(profSun&&flexNeeded>0)chosen.push(profSun);
+    // R4: almeno un'esperta di profumeria in turno la domenica
+    const espertaSun = ordinati.find(e => e.isProfumeria);
+    const giaProf = [...sunWorkers].some(id => (getEmp(id)||{}).isProfumeria);
+    if(espertaSun && !giaProf && sunWorkers.size < SUN_WORKERS) sunWorkers.add(espertaSun.id);
+    for(const e of ordinati){
+      if(sunWorkers.size >= SUN_WORKERS) break;
+      sunWorkers.add(e.id);
     }
-    for(const e of sorted){
-      if(chosen.length>=flexNeeded)break;
-      if(!chosen.includes(e))chosen.push(e);
-    }
-    chosen.forEach(e=>sunWorkerIds.add(e.id));
-
-    // Tutti i flex non scelti → dayOff domenica
-    flexEmps.forEach(emp=>{
-      if(!sunWorkerIds.has(emp.id)&&!sch.days['sun'].dayOff.includes(emp.id)){
-        sch.days['sun'].dayOff.push(emp.id);
-      }
-    });
+    if(sunWorkers.size < SUN_WORKERS)
+      warnings.push(`Domenica (${weekRange(weekStartISO)}): solo ${sunWorkers.size} persone disponibili su ${SUN_WORKERS} — carenza di personale.`);
+    sunWorkers.forEach(id => { restHistory['sun_'+id] = weekIndex });
   }
 
-  // Assign rest days for flex employees — ROTATING
-  // (domenica già gestita sopra per i non-selezionati)
-  const restCount={};
-  openDays.forEach(d=>{restCount[d]=0});
-  avail.forEach(e=>{
-    DAYS_KEY.forEach(k=>{if(sch.days[k].dayOff.includes(e.id)&&S.storeHours[k]&&S.storeHours[k].open)restCount[k]=(restCount[k]||0)+1});
-  });
-  const restPref=['mon','tue','wed','thu','fri','sat','sun'];
-  // Quante esperte profumeria riposano già in ciascun giorno: serve a distribuire
-  // i loro riposi (priorità: ogni giorno di apertura deve avere una profumeria).
-  const profRestCount={};
-  openDays.forEach(d=>{profRestCount[d]=avail.filter(e=>e.isProfumeria&&sch.days[d].dayOff.includes(e.id)).length});
-  flexEmps.forEach(emp=>{
-    const lastRest=restHistory[emp.id];
-    let chosen;
-    if(emp.isDirectore&&openDays.includes('sun')){
-      chosen='sun';
-    } else if(sundayOpen&&!sunWorkerIds.has(emp.id)){
-      // Già messo in dayOff domenica — trova un altro giorno di riposo tra lun-sab
-      // (ha già il riposo domenica, ma ne serve uno anche infrasettimanale se contratto lo richiede)
-      // In realtà la domenica È il suo giorno di riposo settimanale
-      // Non assegnare un secondo riposo — la domenica conta come riposo
-      return; // già gestito sopra
-    } else {
-      // Lavoratori domenica o giorni normali: assegna riposo rotante lun-sab
-      const weekdaysOnly=openDays.filter(d=>d!=='sun');
-      let pool=weekdaysOnly.length>0?weekdaysOnly:openDays;
-      // Il dipendente camion NON può riposare nei giorni camion: escludili dal pool
-      if(emp.takesMorningDelivery){
-        const noCamion=pool.filter(d=>!(S.camionDays&&S.camionDays[d]));
-        if(noCamion.length>0)pool=noCamion; // usa solo giorni non-camion; se vuoto lascia il pool intero
-      }
-      // Escludi il giorno in cui è stato pre-assegnato un turno preferito (non può riposarci)
-      const prefWD=prefWorkDayMap[emp.id];
-      if(prefWD&&pool.includes(prefWD)&&pool.length>1){
-        pool=pool.filter(d=>d!==prefWD);
-      }
-      const sorted2=[...pool].sort((a,b)=>{
-        // penalità extra per le esperte profumeria: evita che due esperte riposino
-        // lo stesso giorno, così ogni giornata resta coperta dalla profumeria
-        const profA=emp.isProfumeria?(profRestCount[a]||0)*50:0;
-        const profB=emp.isProfumeria?(profRestCount[b]||0)*50:0;
-        const penA=(a===lastRest?100:0)+(restCount[a]||0)+profA;
-        const penB=(b===lastRest?100:0)+(restCount[b]||0)+profB;
-        if(penA!==penB)return penA-penB;
-        return restPref.indexOf(a)-restPref.indexOf(b);
-      });
-      chosen=sorted2[0];
-    }
-    if(chosen&&!sch.days[chosen].dayOff.includes(emp.id)){
-      sch.days[chosen].dayOff.push(emp.id);
-      restCount[chosen]=(restCount[chosen]||0)+1;
-      if(emp.isProfumeria)profRestCount[chosen]=(profRestCount[chosen]||0)+1;
-    }
-  });
+  /* ═══ 3. RIPOSO — R1: uno e uno solo ══════════════════════════════ */
+  const riposo = {};                       // empId → dayKey
+  const contaRiposi = {}; feriali.forEach(k => contaRiposi[k] = 0);
+  const contaProfRiposi = {}; feriali.forEach(k => contaProfRiposi[k] = 0);
 
-  // ── NORMALIZZAZIONE RIPOSO SETTIMANALE ──
-  // Regola: UN SOLO giorno di riposo a settimana per dipendente.
-  //  • chi NON è in turno la domenica → il riposo È la domenica (obbligatorio);
-  //  • chi lavora la domenica → il riposo è un altro giorno (lun–sab).
-  // Questa passata ripulisce eventuali riposi doppi o collocati sul giorno sbagliato.
-  const clearRest=(dk,empId)=>{sch.days[dk].dayOff=sch.days[dk].dayOff.filter(id=>id!==empId)};
-  const worksSunday=emp=>sunWorkerIds.has(emp.id)||sch.days['sun'].shifts.some(s=>s.employeeId===emp.id);
-  if(sundayOpen){
-    const weekPool=openDays.filter(d=>d!=='sun');
-    const sunDateN=isoDate(addDays(weekStart,6));
-    // Chi è assente la domenica (ferie/permesso/assenza) non può "riposare" quel giorno:
-    // gli va assegnato comunque un riposo infrasettimanale.
-    const absentSun=emp=>(emp.daysOff||[]).includes(sunDateN)||(emp.permissionDays||[]).includes(sunDateN)||isOnVacationDay(emp,sunDateN);
-    avail.forEach(emp=>{
-      if(!worksSunday(emp)&&!absentSun(emp)){
-        // riposo = domenica; via ogni altro riposo infrasettimanale
-        weekPool.forEach(d=>clearRest(d,emp.id));
-        if(!sch.days['sun'].dayOff.includes(emp.id))sch.days['sun'].dayOff.push(emp.id);
-      } else {
-        // lavora domenica (o è assente quella domenica): un solo riposo lun–sab
-        if(worksSunday(emp))clearRest('sun',emp.id);
-        const rests=weekPool.filter(d=>sch.days[d].dayOff.includes(emp.id));
-        if(rests.length>1){
-          rests.slice(1).forEach(d=>clearRest(d,emp.id));
-        } else if(rests.length===0&&weekPool.length){
-          let pool=[...weekPool];
-          if(emp.takesMorningDelivery){
-            const noCamion=pool.filter(d=>!(S.camionDays&&S.camionDays[d]));
-            if(noCamion.length)pool=noCamion;
-          }
-          const lastRest=restHistory[emp.id];
-          pool.sort((a,b)=>{
-            const penA=(a===lastRest?100:0)+sch.days[a].dayOff.length;
-            const penB=(b===lastRest?100:0)+sch.days[b].dayOff.length;
-            if(penA!==penB)return penA-penB;
-            return restPref.indexOf(a)-restPref.indexOf(b);
-          });
-          sch.days[pool[0]].dayOff.push(emp.id);
-        }
-      }
-    });
-  } else {
-    // Domenica chiusa: un solo giorno di riposo tra i giorni di apertura
-    avail.forEach(emp=>{
-      const rests=openDays.filter(d=>sch.days[d].dayOff.includes(emp.id));
-      rests.slice(1).forEach(d=>clearRest(d,emp.id));
-    });
-  }
+  // ordine: prima le esperte di profumeria, così i loro riposi si
+  // distribuiscono su giorni diversi (R4)
+  const ordineRiposi = [...avail].sort((a,b) => (b.isProfumeria?1:0) - (a.isProfumeria?1:0));
 
-  // ── HELPER: ore consecutive accumulate da empId fino a cursorM (catena senza gap ≥2h) ──
-  const consecHAt=(empId,cursorM,dayKey)=>{
-    const prevS=sch.days[dayKey].shifts
-      .filter(s=>s.employeeId===empId&&t2m(s.endTime)<=cursorM)
-      .sort((a,b)=>t2m(b.startTime)-t2m(a.startTime));
-    let mins=0,ref=cursorM;
-    for(const s of prevS){
-      if(ref-t2m(s.endTime)>=120)break;
-      mins+=t2m(s.endTime)-t2m(s.startTime);
-      ref=t2m(s.startTime);
-    }
-    return mins/60;
-  };
-
-  // ── HELPER: ALTERNANZA MATTINA / POMERIGGIO ──
-  // Regola: nessuno deve fare sempre lo stesso turno (tutte mattine o tutti pomeriggi).
-  // Si tiene traccia, per ogni dipendente, di quante mattine e quanti pomeriggi ha già
-  // fatto nella settimana e di quale turno ha fatto il giorno precedente; il punteggio
-  // che ne deriva ordina i candidati nelle fasi di copertura e riempimento.
-
-  // Classifica un turno come 'morning' o 'afternoon' in base a dove cade la maggior parte
-  const slotOf=(dk,startT,endT)=>{
-    const shd=S.storeHours[dk];
-    if(!shd)return 'morning';
-    const s=t2m(startT),e=t2m(endT);
-    const mid=shd.type==='split'
-      ? Math.round((t2m(shd.me)+t2m(shd.as))/2)
-      : t2m(shd.ms)+Math.round((t2m(shd.ae)-t2m(shd.ms))/2);
-    const mornMin=Math.max(0,Math.min(e,mid)-s);
-    const aftMin =Math.max(0,e-Math.max(s,mid));
-    return aftMin>mornMin?'afternoon':'morning';
-  };
-
-  // Statistiche mattine/pomeriggi sui giorni PRECEDENTI a uptoIdx (esclusivo)
-  const computeSlotStats=(uptoIdx)=>{
-    const st={};
-    avail.forEach(e=>{st[e.id]={morning:0,afternoon:0,last:null,lastDayIdx:-5}});
-    DAYS_KEY.forEach((dk,idx)=>{
-      if(idx>=uptoIdx)return;
-      if(!sch.days[dk])return;
-      const perEmp={};
-      sch.days[dk].shifts.forEach(s=>{
-        const sl=slotOf(dk,s.startTime,s.endTime);
-        if(!perEmp[s.employeeId])perEmp[s.employeeId]={};
-        perEmp[s.employeeId][sl]=true;
-      });
-      Object.keys(perEmp).forEach(eid=>{
-        if(!st[eid])st[eid]={morning:0,afternoon:0,last:null,lastDayIdx:-5};
-        const sls=Object.keys(perEmp[eid]);
-        sls.forEach(sl=>{st[eid][sl]++});
-        st[eid].last=sls.length===1?sls[0]:'both';
-        st[eid].lastDayIdx=idx;
-      });
-    });
-    return st;
-  };
-
-  // Punteggio di penalità: più alto = meno adatto a fare QUEL turno oggi
-  const slotScore=(st,emp,slot,dayIdx)=>{
-    const s=st[emp.id];
-    if(!s)return 0;
-    const other=slot==='morning'?'afternoon':'morning';
-    let p=0;
-    // Penalizza SOLO lo squilibrio (non il volume di ore): chi fa già più mattine che
-    // pomeriggi — o viceversa — passa in coda quando si assegna il turno più frequente.
-    const diff=s[slot]-s[other];
-    if(diff>0)p+=diff*2;
-    // Chi ieri ha fatto SOLO questo turno (non giornata intera) oggi cambia
-    if(s.last===slot&&s.lastDayIdx===dayIdx-1)p+=3;
-    return p;
-  };
-
-  // ── PASSO 1: calcola deficit orario totale della settimana ──
-  const totalContractH=flexEmps.reduce((s,e)=>s+(empMaxH(e)||0),0);
-  // stima ore necessarie a coprire minimo 1 persona per area non-magazzino per giorno aperto
-  const totalAreaCovH=openDays.reduce((s,dk)=>{
-    const sh=S.storeHours[dk];if(!sh)return s;
-    const dayH_val=sh.type==='split'?(t2m(sh.me)-t2m(sh.ms))/60+(t2m(sh.ae)-t2m(sh.as))/60:(t2m(sh.ae)-t2m(sh.ms))/60;
-    return s+dayH_val*S.areas.filter(a=>!a.name.toLowerCase().includes('magazzino')).length;
-  },0);
-  const deficit=Math.max(0,totalAreaCovH-totalContractH);
-  // distribuisci extra equamente tra flex emps (senza direttori?)
-  const otPerEmp=flexEmps.length>0?Math.ceil((deficit/flexEmps.length)*2)/2:0; // arrotonda a 0.5h
-  const extraBudget={}; // ore straordinarie aggiuntive per dipendente
-  if(otPerEmp>0){
-    flexEmps.forEach(e=>{extraBudget[e.id]=otPerEmp});
-  }
-
-  // ── PASSO 2: assegna turni giorno per giorno ──
-  // Strategia: prima riempi la settimana (priorità 1), poi ottimizza aree (priorità 2).
-  // Per ogni giorno aperto:
-  //   a) Camion 07:00 (con regola min 11:00)
-  //   b) coverPeriod: aree non-magazzino (obbligo), poi magazzino (sacrificabile)
-  //   c) fillHours: ore contrattuali residue + eventuali straordinari
-  const isMagArea=a=>a.name.toLowerCase().includes('magazzino');
-  const nonMagAreas=S.areas.filter(a=>!isMagArea(a));
-  const magAreas   =S.areas.filter(a=>isMagArea(a));
-
-  if(!S.areas.length){
-    warnings.push(`⚠️ Nessuna area configurata — i turni vengono assegnati senza area. Configura le aree prima di generare.`);
-  }
-
-  // ── PASSO 1-bis: PRIORITÀ PROFUMERIA — PRIMA si coprono TUTTI i giorni ──
-  // Regola richiesta: per prima cosa si mettono a copertura di ogni giornata di apertura
-  // le dipendenti esperte di profumeria; solo dopo l'algoritmo completa il resto della
-  // copertura con gli altri dipendenti. Per ogni giorno si pre-assegna un turno (mattina
-  // o pomeriggio, alternando) a un'esperta ancora disponibile, riservandole una quota di
-  // ore così che il monte ore non si esaurisca sui primi giorni della settimana.
-  const profAreaMain=S.areas.find(a=>a.name.toLowerCase().includes('profumeria'));
-  const profEmps=flexEmps.filter(e=>e.isProfumeria);
-  if(profEmps.length){
-    const profDays=openDays.filter(d=>d!=='sun'); // domenica gestita a parte (3 persone)
-    profDays.forEach(dayKey=>{
-      const dIdx=DAYS_KEY.indexOf(dayKey);
-      const shd=S.storeHours[dayKey];
-      if(!shd||!shd.open)return;
-      const dDate=isoDate(addDays(weekStart,dIdx));
-
-      // Giorno già coperto da un'esperta (turno fisso o preferenza)? Nulla da fare.
-      const already=sch.days[dayKey].shifts.some(s=>{const e=getEmp(s.employeeId);return e&&e.isProfumeria});
-      if(already)return;
-
-      const cands=profEmps.filter(emp=>{
-        if(sch.days[dayKey].dayOff.includes(emp.id))return false;
-        if((emp.daysOff||[]).includes(dDate))return false;
-        if((emp.permissionDays||[]).includes(dDate))return false;
-        if(isOnVacationDay(emp,dDate))return false;
-        const maxH=empMaxH(emp);
-        return maxH<=0||(worked[emp.id]||0)<maxH-MIN_SHIFT_M/60;
-      });
-      // Nessuna esperta disponibile/collocabile: la giornata verrà coperta dagli altri
-      // dipendenti e segnalata dall'avviso finale di copertura profumeria.
-      if(!cands.length)return;
-
-      // Periodi mattina/pomeriggio del giorno
-      const periods=shd.type==='split'
-        ? [['morning',t2m(shd.ms),t2m(shd.me)],['afternoon',t2m(shd.as),t2m(shd.ae)]]
-        : (()=>{const o=t2m(shd.ms),c=t2m(shd.ae),mid=o+Math.round((c-o)/2);
-                return [['morning',o,mid],['afternoon',mid,c]]})();
-
-      const stats=computeSlotStats(dIdx);
-      let best=null;
-      cands.forEach(emp=>{
-        const maxH=empMaxH(emp);
-        const residual=maxH>0?maxH-(worked[emp.id]||0):9;
-        // giorni residui (oggi incluso) in cui questa esperta può lavorare → quota giornaliera
-        let remDays=0;
-        profDays.forEach(dk=>{
-          const i=DAYS_KEY.indexOf(dk);
-          if(i<dIdx)return;
-          if(sch.days[dk].dayOff.includes(emp.id))return;
-          const dd=isoDate(addDays(weekStart,i));
-          if((emp.daysOff||[]).includes(dd)||(emp.permissionDays||[]).includes(dd)||isOnVacationDay(emp,dd))return;
-          remDays++;
-        });
-        const quotaM=Math.max(MIN_SHIFT_M,Math.round(residual/Math.max(1,remDays)*60));
-        periods.forEach(([slot,pS,pE])=>{
-          // già in turno in quel periodo?
-          if(sch.days[dayKey].shifts.some(s=>s.employeeId===emp.id&&t2m(s.startTime)<pE&&t2m(s.endTime)>pS))return;
-          if(S.maxConcurrentTotal){
-            const conc=sch.days[dayKey].shifts.filter(x=>t2m(x.startTime)<=pS&&t2m(x.endTime)>pS).length;
-            if(conc>=S.maxConcurrentTotal)return;
-          }
-          const durM=Math.min(pE-pS,6*60,Math.round(residual*60),quotaM);
-          if(durM<MIN_SHIFT_M)return;
-          // punteggio: penalità alternanza, a parità premia chi ha più ore residue
-          const sc=slotScore(stats,emp,slot,dIdx)-residual*0.3;
-          if(!best||sc<best.sc)best={emp,slot,pS,durM,sc};
-        });
-      });
-
-      if(!best)return;
-      const endM=best.pS+best.durM;
-      const aId=(profAreaMain&&profAreaMain.id)||((nonMagAreas[0]||S.areas[0]||{id:''}).id);
-      const h=shiftH(m2t(best.pS),m2t(endM));
-      sch.days[dayKey].shifts.push({
-        employeeId:best.emp.id,startTime:m2t(best.pS),endTime:m2t(endM),
-        areaId:aId,hours:h,profPriority:true
-      });
-      worked[best.emp.id]=(worked[best.emp.id]||0)+h;
-    });
-  }
-
-  openDays.forEach(dayKey=>{
-    const dayIdx=DAYS_KEY.indexOf(dayKey);
-    const sh=S.storeHours[dayKey];
-    const dayDate=isoDate(addDays(weekStart,dayIdx));
-    const isSplit=sh.type==='split';
-
-    const working=avail.filter(emp=>{
-      if(sch.days[dayKey].dayOff.includes(emp.id))return false;
-      if((emp.daysOff||[]).includes(dayDate))return false;
-      if((emp.permissionDays||[]).includes(dayDate))return false;
-      if(isOnVacationDay(emp,dayDate))return false; // ferie per questo giorno specifico
-      if(emp.hoursType==='fixed'||emp.isDirectore)return false; // direttore = solo tappabuchi
-      return true;
-    });
-
-    // ── DIRETTORE TAPPABUCHI (funzione) ──
-    // Il direttore copre le aree non-magazzino rimaste scoperte, max 3h/giorno,
-    // nei periodi in cui non è già in turno fisso. Domenica esclusa.
-    // Funziona anche quando non ci sono dipendenti flex disponibili (giorni scoperti).
-    function coverDirectorGaps(){
-      if(dayKey==='sun')return;
-      const directors=avail.filter(e=>e.isDirectore&&!isOnVacationDay(e,dayDate)&&!(e.daysOff||[]).includes(dayDate)&&!(e.permissionDays||[]).includes(dayDate)
-        &&!sch.days[dayKey].dayOff.includes(e.id)); // mai turni nel giorno di riposo
-      directors.forEach(dir=>{
-        let dirCovMin=0;
-        const MAX_DIR_MIN=180; // max 3h/giorno
-        const periods=isSplit?[[t2m(sh.ms),t2m(sh.me)],[t2m(sh.as),t2m(sh.ae)]]:[[t2m(sh.ms),t2m(sh.ae)]];
-        periods.forEach(([pS,pE])=>{
-          if(dirCovMin>=MAX_DIR_MIN)return;
-          const dirBusy=sch.days[dayKey].shifts.some(s=>s.employeeId===dir.id&&t2m(s.startTime)<pE&&t2m(s.endTime)>pS);
-          if(dirBusy)return;
-          const uncoveredArea=nonMagAreas.find(a=>!sch.days[dayKey].shifts.some(s=>s.areaId===a.id&&t2m(s.startTime)<=pS&&t2m(s.endTime)>pS));
-          if(!uncoveredArea)return;
-          const remainMin=MAX_DIR_MIN-dirCovMin;
-          const covMin=Math.min(remainMin,pE-pS,3*60);
-          if(covMin<60)return;
-          const endM=pS+covMin;
-          const h=shiftH(m2t(pS),m2t(endM));
-          sch.days[dayKey].shifts.push({employeeId:dir.id,startTime:m2t(pS),endTime:m2t(endM),areaId:uncoveredArea.id,hours:h,directorGap:true});
-          worked[dir.id]=(worked[dir.id]||0)+h;
-          dirCovMin+=covMin;
-        });
-      });
-    }
-
-    if(!working.length){
-      coverDirectorGaps(); // il direttore può comunque tappare i buchi
-      warnings.push(`${DAYS_FULL[dayIdx]} (${weekRange(weekStartISO)}): nessun dipendente flex disponibile`);
+  ordineRiposi.forEach(emp => {
+    // chi NON lavora la domenica riposa di domenica
+    if(sundayOpen && !sunWorkers.has(emp.id) && !assente(emp, dateOf('sun'))){
+      riposo[emp.id] = 'sun';
       return;
     }
-
-    // ── DOMENICA: giornata piena per i 3 selezionati ──
-    // I lavoratori domenicali coprono tutta la giornata di apertura RISPETTANDO
-    // l'orario del negozio: se la domenica è a orario spezzato vengono creati due
-    // turni (mattina e pomeriggio) separati dalla pausa pranzo; se è continuato
-    // un unico turno apertura→chiusura. Non si applica coverPeriod/fillHours.
-    if(dayKey==='sun'&&sundayOpen&&sunWorkerIds.size>0){
-      const sh_sun=S.storeHours['sun'];
-      const sunPeriods=sh_sun.type==='split'
-        ? [[sh_sun.ms,sh_sun.me],[sh_sun.as,sh_sun.ae]]
-        : [[sh_sun.ms,sh_sun.ae]];
-      // Area: distribuisci i 3 su aree diverse se possibile
-      const sunAreas=[...nonMagAreas,...magAreas];
-      let areaIdx=0;
-      working.filter(emp=>sunWorkerIds.has(emp.id)).forEach(emp=>{
-        const area=sunAreas[areaIdx%sunAreas.length]||sunAreas[0];
-        areaIdx++;
-        const base=empMaxH(emp);
-        sunPeriods.forEach(([pStart,pEnd])=>{
-          const pH=shiftH(pStart,pEnd);
-          if(pH<=0)return;
-          const alreadyWorked=worked[emp.id]||0;
-          const isOT=base>0&&(alreadyWorked+pH)>base;
-          sch.days['sun'].shifts.push({
-            employeeId:emp.id,
-            startTime:pStart,
-            endTime:pEnd,
-            areaId:area?area.id:'',
-            hours:pH,
-            sundayFull:true,
-            overtime:isOT||undefined
-          });
-          worked[emp.id]=alreadyWorked+pH;
-          if(isOT){
-            const otH=Math.min(pH,(alreadyWorked+pH)-base);
-            overtimeH[emp.id]=(overtimeH[emp.id]||0)+otH;
-          }
-        });
-      });
-      // Segna domenica come lavorata per rotazione futura
-      sunWorkerIds.forEach(id=>{restHistory['sun_'+id]=weekIndex});
-      // Avviso se meno di 3 disponibili
-      const actualFlex=working.filter(emp=>sunWorkerIds.has(emp.id)).length;
-      const totalSun=actualFlex+fixedSunCount;
-      if(totalSun<SUN_WORKERS_TOTAL){
-        const msg=fixedSunCount>0
-          ? `Domenica (${weekRange(weekStartISO)}): presenti ${totalSun} su ${SUN_WORKERS_TOTAL} (${fixedSunCount} fisso + ${actualFlex} flex su ${Math.max(0,SUN_WORKERS_TOTAL-fixedSunCount)} richiesti) — carenza personale`
-          : `Domenica (${weekRange(weekStartISO)}): solo ${actualFlex} su ${SUN_WORKERS_TOTAL} lavoratori disponibili — carenza personale`;
-        warnings.push(msg);
-      }
-      return; // domenica gestita — salta coverPeriod e fillHours normali
+    // altrimenti riposo in un giorno feriale: rotazione + distribuzione
+    let pool = feriali.filter(k => !assente(emp, dateOf(k)));
+    if(!pool.length) pool = [...feriali];
+    // l'addetto camion non riposa nei giorni di consegna
+    if(emp.takesMorningDelivery){
+      const senzaCamion = pool.filter(k => !(S.camionDays && S.camionDays[k]));
+      if(senzaCamion.length) pool = senzaCamion;
     }
-    const isCamionDay=!!(S.camionDays&&S.camionDays[dayKey]);
-    if(isCamionDay&&magAreas.length&&t2m(sh.ms)>t2m('07:00')){
-      const camMinEndPre=Math.max(t2m(sh.ms),t2m('11:00'));
-      const camEmp=working.find(e=>e.takesMorningDelivery&&!sch.days[dayKey].shifts.some(x=>
-        x.employeeId===e.id&&t2m(x.startTime)<camMinEndPre&&t2m(x.endTime)>t2m('07:00')));
-      if(camEmp){
-        // deve lavorare almeno fino alle 11:00 (regola: chi entra alle 7 fa min 4h)
-        const camMinEnd=camMinEndPre; // almeno apertura o 11:00
-        const camEndM=camMinEnd;
-        const camH=shiftH('07:00',m2t(camEndM));
-        // Se l'orario del negozio va oltre le 11 in mattinata, il turno camion
-        // si estende fino all'apertura normale (già coperta dalla fase coverPeriod)
-        sch.days[dayKey].shifts.push({employeeId:camEmp.id,startTime:'07:00',endTime:m2t(camEndM),areaId:magAreas[0].id,hours:camH});
-        worked[camEmp.id]=(worked[camEmp.id]||0)+camH;
-      }
+    // il dipendente a orario fisso riposa in un giorno che non lavora
+    if(lavoraFisso(emp.id, 'x') || turniFissi[emp.id]){
+      const liberi = pool.filter(k => !lavoraFisso(emp.id, k));
+      if(liberi.length) pool = liberi;
     }
-
-    // ore disponibili per un dipendente dato cursor
-    const empBudget=(emp,cursor)=>{
-      const base=empMaxH(emp)>0?empMaxH(emp)-(worked[emp.id]||0):9;
-      const ot=extraBudget[emp.id]||0;
-      return base+ot;
-    };
-
-    // calcola fine turno rispettando: ore rimaste, max consecutive, gap futuro, fine periodo
-    const calcRawEnd=(emp,cursor,pEndM)=>{
-      const remH=empBudget(emp,cursor);
-      const consec=consecHAt(emp.id,cursor,dayKey);
-      const maxConsecRem=Math.max(0,6-consec);
-      const nextFut=sch.days[dayKey].shifts
-        .filter(s=>s.employeeId===emp.id&&t2m(s.startTime)>cursor)
-        .sort((a,b)=>t2m(a.startTime)-t2m(b.startTime))[0];
-      const futureCap=nextFut?t2m(nextFut.startTime)-120:pEndM;
-      return Math.min(cursor+remH*60,cursor+maxConsecRem*60,futureCap,pEndM);
-    };
-
-    // ── HELPER: estendi l'ultimo turno di empId di questo giorno ──
-    // Usato quando il frammento disponibile è < MIN_SHIFT_M ma il dipendente
-    // ha già un turno: aggiungiamo le ore residue all'ultimo turno esistente
-    // anche se va in straordinario.
-    const extendLastShift=(emp,extraMinutes)=>{
-      if(extraMinutes<=0)return;
-      const empShifts=sch.days[dayKey].shifts
-        .filter(s=>s.employeeId===emp.id)
-        .sort((a,b)=>t2m(b.endTime)-t2m(a.endTime));
-      if(!empShifts.length)return;
-      const last=empShifts[0];
-      // Mai superare la chiusura del negozio né le 23:59
-      const dayCloseM=t2m(sh.ae);
-      const hardCap=Math.min(dayCloseM,23*60+59);
-      const currentEndM=t2m(last.endTime);
-      if(currentEndM>=hardCap)return;
-      // Rispetta il limite di 6h consecutive: calcola quanto dura già il turno
-      const shiftDurM=t2m(last.endTime)-t2m(last.startTime);
-      const maxExtM=Math.max(0,(6*60)-shiftDurM); // minuti aggiuntivi consentiti prima del cap 6h
-      const allowedExtra=Math.min(extraMinutes,hardCap-currentEndM,maxExtM>0?maxExtM:extraMinutes);
-      // Se il turno è già a 6h, non estendere (forza pausa)
-      if(shiftDurM>=6*60)return;
-      if(allowedExtra<=0)return;
-      const newEndM=currentEndM+allowedExtra;
-      const newEnd=m2t(newEndM);
-      const addedH=allowedExtra/60;
-      last.endTime=newEnd;
-      last.hours=(last.hours||0)+addedH;
-      worked[emp.id]=(worked[emp.id]||0)+addedH;
-      const base=empMaxH(emp);
-      if(base>0&&worked[emp.id]>base){
-        last.overtime=true;
-        const otAdded=Math.min(addedH,worked[emp.id]-base);
-        overtimeH[emp.id]=(overtimeH[emp.id]||0)+otAdded;
-      }
-    };
-
-    // ── b) COPERTURA AREE (area-first, cursor-based) ──
-    // Prima non-magazzino (obbligatorie), poi magazzino (sacrificabile)
-    const coverPeriod=(areaList,pStartT,pEndT)=>{
-      const covered=new Set();
-      const pEndM=t2m(pEndT);
-      // turno corrente (mattina/pomeriggio) e storico per l'alternanza
-      const curSlot=slotOf(dayKey,pStartT,pEndT);
-      const slotStats=computeSlotStats(dayIdx);
-
-      areaList.forEach(area=>{
-        const minReq=Math.max(1,area.minCoverage||1);
-        const areaMaxC=area.maxConcurrent||999;
-        const isProfArea=area.name.toLowerCase().includes('profumeria');
-        let cursor=t2m(pStartT);
-        let fullyCovered=true;
-
-        while(cursor<pEndM){
-          const _cursorSnapshot=cursor; // safety: se il cursor non avanza → break
-          const covering=sch.days[dayKey].shifts.filter(s=>
-            s.areaId===area.id&&t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor
-          );
-          if(covering.length>=minReq){
-            cursor=covering.reduce((mn,s)=>Math.min(mn,t2m(s.endTime)),pEndM);
-            continue;
-          }
-          if(covering.length>=areaMaxC){
-            cursor=covering.reduce((mn,s)=>Math.min(mn,t2m(s.endTime)),pEndM);
-            fullyCovered=false; break;
-          }
-          const concNow=sch.days[dayKey].shifts.filter(s=>
-            t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor
-          ).length;
-          if(S.maxConcurrentTotal&&concNow>=S.maxConcurrentTotal){
-            const nx=sch.days[dayKey].shifts
-              .filter(s=>t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor)
-              .reduce((mn,s)=>Math.min(mn,t2m(s.endTime)),pEndM);
-            fullyCovered=false;
-            if(nx>=pEndM)break;
-            cursor=nx;
-            continue;
-          }
-          const cands=working.filter(emp=>{
-            if(sch.days[dayKey].shifts.some(s=>
-              s.employeeId===emp.id&&t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor
-            ))return false;
-            if(consecHAt(emp.id,cursor,dayKey)>=6)return false;
-            return empBudget(emp,cursor)>MIN_SHIFT_M/60;
-          }).sort((a,b)=>{
-            const profA=(isProfArea&&a.isProfumeria)?10:0;
-            const profB=(isProfArea&&b.isProfumeria)?10:0;
-            if(profA!==profB)return profB-profA;
-            // Alternanza mattina/pomeriggio: chi ha già fatto molte volte questo turno
-            // (o l'ha fatto ieri) scende in coda; a parità vince chi ha più ore residue.
-            const scA=slotScore(slotStats,a,curSlot,dayIdx)-empBudget(a,cursor);
-            const scB=slotScore(slotStats,b,curSlot,dayIdx)-empBudget(b,cursor);
-            return scA-scB;
-          });
-
-          if(!cands.length){
-            // Nessun candidato con ≥2h disponibili.
-            // Prova a estendere chi ha già un turno oggi che finisce al cursor
-            const extCands=working.filter(emp=>
-              sch.days[dayKey].shifts.some(s=>s.employeeId===emp.id&&t2m(s.endTime)===cursor)
-            );
-            if(extCands.length>0){
-              const emp=extCands[0];
-              const extMin=pEndM-cursor; // estendi fino alla fine del periodo
-              if(extMin>0){extendLastShift(emp,extMin);cursor=pEndM;}
-            }
-            fullyCovered=false;break; // in ogni caso esci dal while
-          }
-
-          let assigned=false;
-          const prevCursor=cursor; // salva per rilevare cursor fermo
-          for(const emp of cands){
-            const rawEndM=calcRawEnd(emp,cursor,pEndM);
-            if(rawEndM<=cursor)continue; // calcRawEnd non avanza → salta
-            if(rawEndM-cursor<MIN_SHIFT_M){
-              // frammento troppo corto: estendi l'ultimo turno esistente
-              const hasShiftToday=sch.days[dayKey].shifts.some(s=>s.employeeId===emp.id);
-              if(hasShiftToday&&rawEndM>cursor){
-                extendLastShift(emp,rawEndM-cursor);
-                cursor=rawEndM;
-                assigned=true;
-              }
-              continue;
-            }
-            const sT=m2t(cursor),eT=m2t(rawEndM);
-            const actualH=shiftH(sT,eT);
-            const baseRem=empMaxH(emp)>0?empMaxH(emp)-(worked[emp.id]||0):actualH;
-            const isOT=baseRem<=0&&(extraBudget[emp.id]||0)>0;
-            sch.days[dayKey].shifts.push({employeeId:emp.id,startTime:sT,endTime:eT,areaId:area.id,hours:actualH,overtime:isOT||undefined});
-            worked[emp.id]=(worked[emp.id]||0)+actualH;
-            if(isOT)overtimeH[emp.id]=(overtimeH[emp.id]||0)+actualH;
-            if(isOT&&extraBudget[emp.id]){extraBudget[emp.id]=Math.max(0,extraBudget[emp.id]-actualH)}
-            cursor=rawEndM;
-            assigned=true;
-            break;
-          }
-          if(!assigned||cursor<=prevCursor){
-            // cursor non è avanzato: esci per evitare loop infinito
-            const nextRelease=sch.days[dayKey].shifts
-              .filter(s=>t2m(s.endTime)>cursor&&t2m(s.endTime)<pEndM)
-              .reduce((mn,s)=>Math.min(mn,t2m(s.endTime)),pEndM);
-            fullyCovered=false;
-            if(nextRelease>=pEndM||nextRelease<=cursor)break;
-            cursor=nextRelease;
-          }
-          if(cursor===_cursorSnapshot){fullyCovered=false;break;} // safety net
-        }
-        if(fullyCovered&&cursor>=pEndM)covered.add(area.id);
-      });
-      return covered;
-    };
-
-    // Ordine copertura: non-mag prima (obbligo), mag dopo (sacrificabile)
-    const orderedAreas=[...nonMagAreas,...magAreas];
-    const mornCov=coverPeriod(orderedAreas,sh.ms,isSplit?sh.me:sh.ae);
-    const aftnCov=isSplit?coverPeriod(orderedAreas,sh.as,sh.ae):new Set([...mornCov]);
-
-    // ── c) RIEMPIMENTO ORE CONTRATTUALI + STRAORDINARI ──
-    // Priorità 1 (regola nuova): prima riempi TUTTA la settimana assegnando ore a ogni giorno
-    // Questo fillHours completa il contratto di ogni dipendente nel giorno corrente
-    const fillHours=(pStartT,pEndT)=>{
-      const pStartM=t2m(pStartT),pEndM=t2m(pEndT);
-      const curSlotF=slotOf(dayKey,pStartT,pEndT);
-      const slotStatsF=computeSlotStats(dayIdx);
-      const sortedW=[...working].sort((a,b)=>{
-        // ore residue, corrette dalla penalità di alternanza mattina/pomeriggio
-        const rA=empBudget(a,pStartM)-slotScore(slotStatsF,a,curSlotF,dayIdx);
-        const rB=empBudget(b,pStartM)-slotScore(slotStatsF,b,curSlotF,dayIdx);
-        return rB-rA;
-      });
-      sortedW.forEach(emp=>{
-        const maxH=empMaxH(emp);
-        if(maxH<=0)return;
-        // ── CAP GIORNALIERO per distribuire le ore su tutta la settimana ──
-        // Conta i giorni lavorativi RIMANENTI (oggi incluso) in cui il dip. può lavorare:
-        // giorni aperti, non riposo, non ferie/assenza, da oggi in poi.
-        let remainingWorkDays=0;
-        const todayIdx=DAYS_KEY.indexOf(dayKey);
-        openDays.forEach(dk=>{
-          const dIdx=DAYS_KEY.indexOf(dk);
-          if(dIdx<todayIdx)return; // giorni passati nella settimana già processati
-          if(dk==='sun')return; // domenica gestita a parte
-          if(sch.days[dk].dayOff.includes(emp.id))return;
-          const dDate=isoDate(addDays(weekStart,dIdx));
-          if((emp.daysOff||[]).includes(dDate)||(emp.permissionDays||[]).includes(dDate)||isOnVacationDay(emp,dDate))return;
-          remainingWorkDays++;
-        });
-        const residualH=maxH-(worked[emp.id]||0);
-        // target giornaliero: distribuisce equamente le ore residue sui giorni rimanenti.
-        // Aggiunge un piccolo margine (1.15x) per assorbire arrotondamenti, ma cap a un turno pieno.
-        const dailyTarget=remainingWorkDays>0?Math.min(residualH/remainingWorkDays*1.15,residualH):residualH;
-        const workedTodayStart=DAYS_KEY.map(()=>0); // placeholder
-        let cursor=pStartM;
-        let _fillSafe=0; // safety counter anti-loop
-        while(cursor<pEndM){
-          if(++_fillSafe>2000)break; // max 2000 iterazioni per dipendente per periodo
-          // ore già assegnate oggi a questo dipendente
-          const todayH=sch.days[dayKey].shifts.filter(s=>s.employeeId===emp.id).reduce((s,x)=>s+(x.hours||0),0);
-          if(todayH>=dailyTarget-0.01)break; // raggiunto il target giornaliero: lascia ore per gli altri giorni
-          const totalBudget=Math.min(empBudget(emp,cursor),dailyTarget-todayH);
-          if(totalBudget<=MIN_SHIFT_M/60)break;
-          const act=sch.days[dayKey].shifts.find(s=>
-            s.employeeId===emp.id&&t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor
-          );
-          if(act){cursor=t2m(act.endTime);continue;}
-          const consec=consecHAt(emp.id,cursor,dayKey);
-          if(consec>=6){cursor=Math.min(cursor+120,pEndM);continue;}
-          const concNow=sch.days[dayKey].shifts.filter(s=>
-            t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor
-          ).length;
-          if(S.maxConcurrentTotal&&concNow>=S.maxConcurrentTotal){
-            const nx=sch.days[dayKey].shifts
-              .filter(s=>t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor)
-              .reduce((mn,s)=>Math.min(mn,t2m(s.endTime)),pEndM);
-            cursor=nx;continue;
-          }
-          const maxCR=Math.max(0,6-consec);
-          const nxFut=sch.days[dayKey].shifts
-            .filter(s=>s.employeeId===emp.id&&t2m(s.startTime)>cursor)
-            .sort((a,b)=>t2m(a.startTime)-t2m(b.startTime))[0];
-          const fCap=nxFut?t2m(nxFut.startTime)-120:pEndM;
-          const rawE=Math.round(Math.min(cursor+totalBudget*60,cursor+maxCR*60,fCap,pEndM));
-          if(rawE<=cursor){break;} // budget o consec azzerati: esci
-          if(rawE-cursor<MIN_SHIFT_M){
-            // frammento troppo corto per un nuovo turno
-            const hasShiftToday=sch.days[dayKey].shifts.some(s=>s.employeeId===emp.id);
-            if(hasShiftToday){
-              extendLastShift(emp,rawE-cursor);
-              cursor=rawE; // cursor avanza sempre
-              continue;
-            }
-            // nessun turno da estendere: salta al prossimo turno futuro o esci
-            if(nxFut&&t2m(nxFut.startTime)>cursor&&t2m(nxFut.startTime)<pEndM){
-              cursor=t2m(nxFut.startTime);
-            } else {break;}
-            continue;
-          }
-          // migliore area disponibile (non-mag prima)
-          const bestA=orderedAreas
-            .filter(a=>{
-              const mc=a.maxConcurrent||999;
-              const cc=sch.days[dayKey].shifts.filter(s=>
-                s.areaId===a.id&&t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor
-              ).length;
-              return cc<mc;
-            })
-            .sort((a,b)=>{
-              const ccA=sch.days[dayKey].shifts.filter(s=>s.areaId===a.id&&t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor).length;
-              const ccB=sch.days[dayKey].shifts.filter(s=>s.areaId===b.id&&t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor).length;
-              return ccA-ccB;
-            })[0];
-          if(!bestA){
-            const nx2=sch.days[dayKey].shifts
-              .filter(s=>t2m(s.endTime)>cursor&&t2m(s.endTime)<=pEndM)
-              .reduce((mn,s)=>Math.min(mn,t2m(s.endTime)),pEndM);
-            cursor=nx2;continue;
-          }
-          const sT=m2t(cursor),eT=m2t(rawE);
-          const actualH=shiftH(sT,eT);
-          const baseRem=empMaxH(emp)>0?empMaxH(emp)-(worked[emp.id]||0):actualH;
-          const isOT=baseRem<=0;
-          sch.days[dayKey].shifts.push({employeeId:emp.id,startTime:sT,endTime:eT,areaId:bestA.id,hours:actualH,overtime:isOT||undefined});
-          worked[emp.id]=(worked[emp.id]||0)+actualH;
-          if(isOT){overtimeH[emp.id]=(overtimeH[emp.id]||0)+actualH;if(extraBudget[emp.id])extraBudget[emp.id]=Math.max(0,extraBudget[emp.id]-actualH)}
-          cursor=rawE;
-        }
-      });
-    };
-
-    for(let _p=0;_p<4;_p++){
-      fillHours(sh.ms,isSplit?sh.me:sh.ae);
-      if(isSplit)fillHours(sh.as,sh.ae);
-    }
-
-    // ── d) DIRETTORE TAPPABUCHI ──
-    coverDirectorGaps();
-
-    // ── Avvisi copertura ──
-    // Non-mag sempre segnalate; mag segnalata solo se NESSUNA area è coperta
-    S.areas.forEach(a=>{
-      const isMag=isMagArea(a);
-      const covMorn=mornCov.has(a.id);
-      const covAftn=isSplit?aftnCov.has(a.id):covMorn;
-      if(isMag){
-        // sacrificabile: segnala solo se anche le altre aree hanno problemi
-        if(!covMorn&&!covAftn){
-          warnings.push(`${DAYS_FULL[dayIdx]} (${weekRange(weekStartISO)}): "${a.name}" non coperta (accettabile per carenza personale)`);
-        }
-      } else {
-        if(!covMorn&&!covAftn){
-          warnings.push(`⚠️ ${DAYS_FULL[dayIdx]} (${weekRange(weekStartISO)}): area "${a.name}" NON coperta — verificare disponibilità personale`);
-        } else if(isSplit&&(!covMorn||!covAftn)){
-          warnings.push(`${DAYS_FULL[dayIdx]} (${weekRange(weekStartISO)}): "${a.name}" scoperta nel ${!covMorn?'mattino':'pomeriggio'}`);
-        }
-      }
+    const ultimo = restHistory[emp.id];
+    pool.sort((a,b) => {
+      const pa = (a === ultimo ? 100 : 0) + contaRiposi[a] + (emp.isProfumeria ? contaProfRiposi[a]*50 : 0);
+      const pb = (b === ultimo ? 100 : 0) + contaRiposi[b] + (emp.isProfumeria ? contaProfRiposi[b]*50 : 0);
+      if(pa !== pb) return pa - pb;
+      return DAYS_KEY.indexOf(a) - DAYS_KEY.indexOf(b);
     });
+    riposo[emp.id] = pool[0];
+    contaRiposi[pool[0]]++;
+    if(emp.isProfumeria) contaProfRiposi[pool[0]]++;
   });
 
-  // ── PASSO 3: SATURAZIONE EQUA DELLE ORE CONTRATTUALI ──
-  // Priorità: riempire TUTTA la settimana saturando le ore contrattuali di OGNI dipendente
-  // prima di assegnare straordinari. Approccio round-robin: ad ogni ciclo serve il
-  // dipendente col maggior deficit, gli si aggiunge un blocco, poi si ricalcola.
-  // Questo evita che un dipendente vada in straordinario mentre altri restano in carenza.
-  const extendShiftTo=(dd,empId,newEndM)=>{
-    const myShifts=dd.shifts.filter(s=>s.employeeId===empId).sort((a,b)=>t2m(b.endTime)-t2m(a.endTime));
-    if(!myShifts.length)return 0;
-    const last=myShifts[0];
-    const oldEndM=t2m(last.endTime);
-    if(newEndM<=oldEndM)return 0;
-    const addedH=(newEndM-oldEndM)/60;
-    last.endTime=m2t(newEndM);
-    last.hours=(last.hours||0)+addedH;
-    return addedH;
-  };
+  avail.forEach(e => {
+    const r = riposo[e.id];
+    if(r && !sch.days[r].dayOff.includes(e.id)) sch.days[r].dayOff.push(e.id);
+  });
 
-  // Prova ad aggiungere UN blocco di ore a un dipendente in UN giorno specifico.
-  // Ritorna ore aggiunte (0 se nulla). maxBlockH limita la dimensione del blocco
-  // per favorire la distribuzione su più giorni invece di saturare un giorno solo.
-  const tryAddBlock=(emp,dayKey,maxBlockH)=>{
-    if(dayKey==='sun')return 0;
-    const dd=sch.days[dayKey];
-    if(dd.dayOff.includes(emp.id))return 0;
-    const dayIdx2=DAYS_KEY.indexOf(dayKey);
-    const dayDate2=isoDate(addDays(weekStart,dayIdx2));
-    if((emp.daysOff||[]).includes(dayDate2)||(emp.permissionDays||[]).includes(dayDate2)||isOnVacationDay(emp,dayDate2))return 0;
-    const sh2=S.storeHours[dayKey];if(!sh2)return 0;
-    const dayClose=Math.min(t2m(sh2.ae),23*60+59);
-    const maxH=empMaxH(emp);
-    const residual=Math.max(0,maxH-(worked[emp.id]||0));
-    if(residual<=0.01)return 0;
-    const need=Math.round(Math.min(residual,maxBlockH)*60);
-    if(need<30)return 0;
+  /* giorni lavorativi di ciascun dipendente (R2 si applica a questi) */
+  const giorniLavoro = emp => openDays.filter(k =>
+    k !== riposo[emp.id] && !assente(emp, dateOf(k)));
 
-    // 1) estendi l'ultimo turno esistente del giorno (max 6h consecutive)
-    const myShifts=dd.shifts.filter(s=>s.employeeId===emp.id).sort((a,b)=>t2m(b.endTime)-t2m(a.endTime));
-    if(myShifts.length){
-      const last=myShifts[0];
-      const lastEndM=t2m(last.endTime);
-      const lastDurM=t2m(last.endTime)-t2m(last.startTime);
-      const consecRoom=Math.max(0,6*60-lastDurM);
-      const nextSh=dd.shifts.filter(s=>s.employeeId===emp.id&&t2m(s.startTime)>lastEndM).sort((a,b)=>t2m(a.startTime)-t2m(b.startTime))[0];
-      const capByNext=nextSh?t2m(nextSh.startTime)-lastEndM:(dayClose-lastEndM);
-      // non attraversare la pausa pranzo: se il negozio è split e il turno finisce
-      // entro la fine mattina, l'estensione si ferma a fine mattina (me)
-      let periodCapM=dayClose-lastEndM;
-      if(sh2.type==='split'&&lastEndM<=t2m(sh2.me)){periodCapM=t2m(sh2.me)-lastEndM;}
-      const room=Math.min(periodCapM,consecRoom,capByNext,need);
-      if(room>=30){
-        const addedH=extendShiftTo(dd,emp.id,lastEndM+room);
-        if(addedH>0){worked[emp.id]=(worked[emp.id]||0)+addedH;return addedH;}
-      }
-    }
-
-    // 2) aggiungi un nuovo turno in uno slot libero (rispetta pausa 2h, concorrenza)
-    const myDayShifts=dd.shifts.filter(s=>s.employeeId===emp.id).sort((a,b)=>t2m(a.startTime)-t2m(b.startTime));
-    // candidati di inizio: apertura mattina, inizio pomeriggio (se split),
-    // E il rientro dopo una pausa di 2h da ogni turno esistente del dipendente (per negozi continuati)
-    const startCandidates=sh2.type==='split'?[t2m(sh2.ms),t2m(sh2.as)]:[t2m(sh2.ms)];
-    myDayShifts.forEach(s=>{const after=t2m(s.endTime)+120;if(after<dayClose&&!startCandidates.includes(after))startCandidates.push(after);});
-    // Alternanza: prova per primo lo slot (mattina/pomeriggio) che il dipendente ha
-    // fatto meno volte in settimana, così le ore residue non finiscono sempre nello
-    // stesso momento della giornata.
-    const statsSat=computeSlotStats(dayIdx2);
-    const slotAtStart=stM=>slotOf(dayKey,m2t(stM),m2t(Math.min(stM+MIN_SHIFT_M,dayClose)));
-    startCandidates.sort((a,b)=>{
-      const sa=slotScore(statsSat,emp,slotAtStart(a),dayIdx2);
-      const sb=slotScore(statsSat,emp,slotAtStart(b),dayIdx2);
-      if(Math.abs(sa-sb)>0.01)return sa-sb;
-      return a-b;
-    });
-    for(let stM of startCandidates){
-      // Un turno non può iniziare durante la pausa pranzo del negozio: se il rientro
-      // dopo le 2h di pausa cade prima della riapertura pomeridiana, si sposta all'orario
-      // di riapertura (negozio a orario spezzato).
-      if(sh2.type==='split'&&stM>t2m(sh2.me)&&stM<t2m(sh2.as))stM=t2m(sh2.as);
-      if(myDayShifts.some(s=>stM<t2m(s.endTime)&&(stM+MIN_SHIFT_M)>t2m(s.startTime)))continue;
-      if(myDayShifts.some(s=>t2m(s.endTime)<=stM&&stM-t2m(s.endTime)<120))continue;
-      // non iniziare un turno prima dell'apertura
-      if(stM<t2m(sh2.ms))continue;
-      const periodEnd=(sh2.type==='split'&&stM<t2m(sh2.me))?t2m(sh2.me):dayClose;
-      // Se il residuo è < MIN_SHIFT_M, usa il periodo intero (preferibile a lasciare carenza).
-      // Questo può generare al massimo un piccolo straordinario (< MIN_SHIFT_M).
-      const effectiveNeed=need<MIN_SHIFT_M?(periodEnd-stM):need;
-      const maxLen=Math.min(periodEnd-stM,6*60,effectiveNeed);
-      if(maxLen<MIN_SHIFT_M)continue; // rispetta sempre il turno minimo di 4h
-      if(S.maxConcurrentTotal){
-        const conc=dd.shifts.filter(s=>t2m(s.startTime)<=stM&&t2m(s.endTime)>stM).length;
-        if(conc>=S.maxConcurrentTotal)continue;
-      }
-      const endM=stM+maxLen;
-      const areaCnt={};S.areas.forEach(a=>{areaCnt[a.id]=dd.shifts.filter(s=>s.areaId===a.id).length});
-      let aId='';
-      if(emp.isProfumeria){const pA=S.areas.find(a=>a.name.toLowerCase().includes('profumeria'));if(pA)aId=pA.id}
-      if(!aId){const free=S.areas.find(a=>!areaCnt[a.id]);aId=free?free.id:(S.areas[0]||{id:''}).id}
-      const h=shiftH(m2t(stM),m2t(endM));
-      dd.shifts.push({employeeId:emp.id,startTime:m2t(stM),endTime:m2t(endM),areaId:aId,hours:h});
-      worked[emp.id]=(worked[emp.id]||0)+h;
-      return h;
-    }
-    return 0;
-  };
-
-  // FASE A — SATURAZIONE distribuita: round-robin sul dipendente più carente,
-  // un blocco alla volta, provando i giorni in ordine di minor carico già assegnato.
-  // I dipendenti che non possono ricevere ore vengono ESCLUSI, senza fermare gli altri.
-  const blocked=new Set();
-  let saturGuard=0;
-  while(saturGuard++<2000){
-    const under=flexEmps.filter(e=>empMaxH(e)>0&&!blocked.has(e.id)&&(worked[e.id]||0)<empMaxH(e)-0.25)
-      .sort((a,b)=>(empMaxH(b)-(worked[b.id]||0))-(empMaxH(a)-(worked[a.id]||0)));
-    if(!under.length)break;
-    const emp=under[0];
-    // ordina i giorni lavorativi per ore già assegnate a questo dip. (meno carico prima → distribuzione)
-    const dayLoad=k=>{const dd=sch.days[k];return dd?dd.shifts.filter(s=>s.employeeId===emp.id).reduce((s,x)=>s+(x.hours||0),0):99};
-    const daysSorted=openDays.filter(k=>k!=='sun').sort((a,b)=>dayLoad(a)-dayLoad(b));
-    let added=0;
-    for(const dayKey of daysSorted){
-      if((worked[emp.id]||0)>=empMaxH(emp)-0.25)break;
-      // blocco massimo ~4h per favorire la distribuzione ma consentire rientri pomeridiani pieni
-      added+=tryAddBlock(emp,dayKey,4);
-      if(added>0.01)break; // un blocco alla volta, poi ripassa il round-robin
-    }
-    if(added<=0.01)blocked.add(emp.id); // questo dip non può ricevere altro: escludilo, NON fermare il resto
-  }
-
-  // FASE A-bis — RECUPERO RESIDUI: giro finale aggressivo. Per ogni dipendente ancora
-  // sotto contratto, tenta di aggiungere ore in OGNI giorno con blocchi pieni (fino a 6h),
-  // senza vincolo di distribuzione. Recupera i frammenti residui.
-  let recoverGuard=0;
-  let recovering=true;
-  while(recovering&&recoverGuard++<2000){
-    recovering=false;
-    flexEmps.forEach(emp=>{
-      if(empMaxH(emp)<=0)return;
-      if((worked[emp.id]||0)>=empMaxH(emp)-0.25)return;
-      for(const dayKey of openDays.filter(k=>k!=='sun')){
-        if((worked[emp.id]||0)>=empMaxH(emp)-0.25)break;
-        const got=tryAddBlock(emp,dayKey,6);
-        if(got>0.01){recovering=true;}
-      }
+  /* ═══ 4. DOMENICA: giornata piena per chi è in turno (R6) ═════════ */
+  if(sundayOpen){
+    const fasceSun = fasceDelGiorno('sun');
+    sunWorkers.forEach(id => {
+      if(lavoraFisso(id,'sun')) return;      // il fisso segue il proprio orario
+      fasceSun.forEach(f => occupa(id, 'sun', f));
     });
   }
 
-  // ── PASSO 3-ter: NESSUNA GIORNATA INTERA SENZA TURNO ──
-  // Il riposo è UN giorno intero non lavorato: quindi ogni altro giorno di apertura deve
-  // avere almeno un turno. Ore vuote all'interno di una giornata sono ammesse, una
-  // giornata interamente vuota no. Per ogni giornata scoperta si procede in ordine:
-  //   1) assegnare ore contrattuali ancora disponibili (turno pieno);
-  //   2) assegnare una presenza minima di 2h se restano poche ore;
-  //   3) se il contratto è saturo, SPOSTARE ore da una giornata più carica: le ore totali
-  //      non cambiano, cambia la loro distribuzione sui giorni.
-  const MIN_PRESENCE_M=120; // presenza minima giornaliera: 2h
-  const empDayH=(dk,id)=>sch.days[dk].shifts.filter(s=>s.employeeId===id).reduce((a,x)=>a+(x.hours||0),0);
-  const hasShiftOn=(dk,id)=>sch.days[dk].shifts.some(s=>s.employeeId===id);
-  const dayAvailable=(emp,dk)=>{
-    if(dk==='sun')return false;                        // domenica ha regole proprie
-    if(sch.days[dk].dayOff.includes(emp.id))return false;
-    const dIdx=DAYS_KEY.indexOf(dk);
-    const dDate=isoDate(addDays(weekStart,dIdx));
-    if((emp.daysOff||[]).includes(dDate))return false;
-    if((emp.permissionDays||[]).includes(dDate))return false;
-    if(isOnVacationDay(emp,dDate))return false;
-    return true;
+  /* ═══ 5. PRESENZA BASE — R2 ═══════════════════════════════════════
+     Ogni dipendente riceve UNA fascia in ciascuno dei suoi giorni
+     lavorativi. La fascia si sceglie per alternanza (R5), capienza e
+     copertura profumeria (R4).                                      */
+  const contaFasce = {};    // empId → {M:n, P:n}
+  avail.forEach(e => contaFasce[e.id] = {M:0, P:0});
+  const registra = (id, f) => { contaFasce[id][f.id]++ };
+  // le fasce domenicali già assegnate contano per l'alternanza
+  if(sundayOpen) sunWorkers.forEach(id => fasceDi(id,'sun').forEach(f => registra(id,f)));
+
+  const preferenzaDi = (emp, k) => {
+    const p = (emp.datePreferences||[]).find(x => x.date === dateOf(k));
+    return p ? (p.slot === 'afternoon' ? 'P' : 'M') : null;
   };
 
-  // Intervallo libero più lungo (≥minM) in un periodo, rispettando il limite di persone
-  // in contemporanea; ritorna {s,e,slot} oppure null.
-  const findFreeSlot=(emp,dk,minM,maxM)=>{
-    const shd=S.storeHours[dk];
-    if(!shd||!shd.open)return null;
-    const dIdx=DAYS_KEY.indexOf(dk);
-    const periods=shd.type==='split'
-      ? [['morning',t2m(shd.ms),t2m(shd.me)],['afternoon',t2m(shd.as),t2m(shd.ae)]]
-      : [['morning',t2m(shd.ms),t2m(shd.ae)]];
-    const stats=computeSlotStats(dIdx);
-    const ordered=[...periods].sort((a,b)=>slotScore(stats,emp,a[0],dIdx)-slotScore(stats,emp,b[0],dIdx));
-    const cap=S.maxConcurrentTotal||999;
-    for(const [slot,pS,pE] of ordered){
-      // punti di cambio della contemporaneità dentro il periodo
-      const marks=[pS,pE];
-      sch.days[dk].shifts.forEach(x=>{
-        [t2m(x.startTime),t2m(x.endTime)].forEach(m=>{if(m>pS&&m<pE&&!marks.includes(m))marks.push(m)});
-      });
-      marks.sort((a,b)=>a-b);
-      // unisci i tratti consecutivi con contemporaneità sotto il limite
-      let runS=null,best=null;
-      for(let k=0;k<marks.length-1;k++){
-        const a=marks[k],b=marks[k+1];
-        const conc=sch.days[dk].shifts.filter(x=>t2m(x.startTime)<=a&&t2m(x.endTime)>a).length;
-        const busy=sch.days[dk].shifts.some(x=>x.employeeId===emp.id&&t2m(x.startTime)<b&&t2m(x.endTime)>a);
-        if(conc<cap&&!busy){ if(runS===null)runS=a; if(!best||b-runS>best.e-best.s)best={s:runS,e:b,slot}; }
-        else runS=null;
-      }
-      if(best&&best.e-best.s>=minM){
-        const len=Math.min(best.e-best.s,maxM,6*60);
-        if(len>=minM)return {s:best.s,e:best.s+len,slot};
-      }
-    }
-    return null;
-  };
+  feriali.forEach(dayKey => {
+    const fasce = fasceDelGiorno(dayKey);
+    if(!fasce.length) return;
 
-  // Area con capienza libera nell'intervallo (non-magazzino prima)
-  const pickArea=(dk,sM,eM,emp)=>{
-    const fits=a=>{
-      const mc=a.maxConcurrent||999;
-      return sch.days[dk].shifts.filter(x=>x.areaId===a.id&&t2m(x.startTime)<eM&&t2m(x.endTime)>sM).length<mc;
-    };
-    if(emp.isProfumeria){
-      const pA=S.areas.find(a=>a.name.toLowerCase().includes('profumeria'));
-      if(pA&&fits(pA))return pA.id;
-    }
-    const free=[...nonMagAreas,...magAreas].find(a=>fits(a));
-    return free?free.id:((S.areas[0]||{id:''}).id);
-  };
-
-  // Recupera minuti da una giornata più carica accorciando l'ultimo turno
-  const stealMinutes=(emp,exceptDay,needM)=>{
-    let got=0;
-    const donors=openDays.filter(d=>d!==exceptDay&&d!=='sun'&&hasShiftOn(d,emp.id))
-      .sort((a,b)=>empDayH(b,emp.id)-empDayH(a,emp.id));
-    for(const don of donors){
-      if(got>=needM)break;
-      const mine=sch.days[don].shifts.filter(s=>s.employeeId===emp.id)
-        .sort((a,b)=>(b.hours||0)-(a.hours||0));
-      for(const sh3 of mine){
-        if(got>=needM)break;
-        const durM=t2m(sh3.endTime)-t2m(sh3.startTime);
-        // lascia almeno la presenza minima nel giorno donatore
-        const dayTotM=Math.round(empDayH(don,emp.id)*60);
-        const cuttable=Math.min(durM-MIN_PRESENCE_M,dayTotM-MIN_PRESENCE_M,needM-got);
-        if(cuttable<30)continue;
-        const newEndM=t2m(sh3.endTime)-cuttable;
-        sh3.endTime=m2t(newEndM);
-        sh3.hours=(sh3.hours||0)-cuttable/60;
-        worked[emp.id]=(worked[emp.id]||0)-cuttable/60;
-        got+=cuttable;
-      }
-    }
-    return got;
-  };
-
-  // Libera un periodo (mattina/pomeriggio) del giorno dk togliendolo a un dipendente che
-  // quel giorno lavora in ENTRAMBI i periodi: così il richiedente può entrare e il
-  // donatore resta comunque in turno. Non lascia scoperte le aree non-magazzino.
-  const freePeriodFromOthers=(emp,dk)=>{
-    const shd=S.storeHours[dk];
-    if(!shd||!shd.open)return false;
-    const periods=shd.type==='split'
-      ? [[t2m(shd.ms),t2m(shd.me)],[t2m(shd.as),t2m(shd.ae)]]
-      : [[t2m(shd.ms),t2m(shd.ae)]];
-    if(periods.length<2)return false; // orario continuato: nessun periodo separabile
-    const inPeriod=(x,pS,pE)=>t2m(x.startTime)<pE&&t2m(x.endTime)>pS;
-    // 1° giro: nessuna area scoperta. 2° giro (relaxed): si accetta di scoprire un'area
-    // NON di profumeria — il richiedente ne eredita la copertura — perché la presenza di
-    // tutti su ogni giornata ha priorità. La profumeria resta sempre protetta.
-    for(const relaxed of [false,true])
-    for(const [pS,pE] of periods){
-      const others=sch.days[dk].shifts.filter(x=>inPeriod(x,pS,pE)&&x.employeeId!==emp.id);
-      // candidati: presenti in questo periodo E anche nell'altro periodo dello stesso giorno
-      const cands=others.filter(x=>{
-        const e2=getEmp(x.employeeId);
-        if(!e2||e2.isDirectore||e2.hoursType==='fixed')return false;
-        return periods.some(([qS,qE])=>(qS!==pS)&&sch.days[dk].shifts.some(y=>
-          y.employeeId===x.employeeId&&inPeriod(y,qS,qE)));
-      }).sort((a,b)=>(worked[b.employeeId]||0)-(worked[a.employeeId]||0)); // chi ha più ore cede
-      for(const victim of cands){
-        const area=getArea(victim.areaId);
-        if(area&&!isMagArea(area)){
-          const covered=sch.days[dk].shifts.some(y=>y!==victim&&y.areaId===victim.areaId
-            &&t2m(y.startTime)<t2m(victim.endTime)&&t2m(y.endTime)>t2m(victim.startTime));
-          const isProfA=area.name.toLowerCase().includes('profumeria');
-          // la profumeria si può liberare solo se resta coperta o se entra un'esperta
-          if(!covered&&isProfA&&!emp.isProfumeria)continue;
-          if(!covered&&!isProfA&&!relaxed)continue;
-        }
-        sch.days[dk].shifts=sch.days[dk].shifts.filter(y=>y!==victim);
-        worked[victim.employeeId]=(worked[victim.employeeId]||0)-(victim.hours||0);
-        return true;
-      }
-    }
-    return false;
-  };
-
-  // Include anche i direttori (tappabuchi): anche per loro una giornata intera senza
-  // turno equivarrebbe a un secondo riposo.
-  const presenzaEmps=[...flexEmps,...avail.filter(e=>e.isDirectore&&!flexEmps.includes(e))];
-  presenzaEmps.forEach(emp=>{
-    openDays.filter(dk=>dayAvailable(emp,dk)&&!hasShiftOn(dk,emp.id)).forEach(dk=>{
-      // 1) ore contrattuali disponibili → turno pieno
-      if(!emp.isDirectore&&tryAddBlock(emp,dk,6)>0.01)return;
-
-      const maxH=empMaxH(emp);
-      let residualM=maxH>0?Math.round((maxH-(worked[emp.id]||0))*60):(emp.isDirectore?180:6*60);
-
-      // 2) poche ore residue → presenza minima
-      // 3) contratto saturo → recupera minuti dalle giornate più cariche
-      if(residualM<MIN_PRESENCE_M){
-        residualM+=stealMinutes(emp,dk,MIN_PRESENCE_M-residualM);
-      }
-      if(residualM<MIN_PRESENCE_M)return; // niente ore recuperabili
-      let slot=findFreeSlot(emp,dk,MIN_PRESENCE_M,residualM);
-      // 4) contemporaneità satura: libera un periodo da chi, quel giorno, ne ha due.
-      //    La presenza di tutti su ogni giornata ha priorità sulla concentrazione delle
-      //    ore di un singolo dipendente; il donatore resta comunque in turno quel giorno.
-      for(let att=0;att<3&&!slot;att++){
-        if(!freePeriodFromOthers(emp,dk))break;
-        slot=findFreeSlot(emp,dk,MIN_PRESENCE_M,residualM);
-      }
-      if(!slot)return;                    // nessuno spazio recuperabile
-      const h=shiftH(m2t(slot.s),m2t(slot.e));
-      sch.days[dk].shifts.push({
-        employeeId:emp.id,startTime:m2t(slot.s),endTime:m2t(slot.e),
-        areaId:pickArea(dk,slot.s,slot.e,emp),hours:h
-      });
-      worked[emp.id]=(worked[emp.id]||0)+h;
+    // chi deve essere presente oggi (esclusi fissi e direttori)
+    const oggi = flex.filter(e => giorniLavoro(e).includes(dayKey));
+    // profumeria prima (R4), poi chi ha più ore da coprire
+    oggi.sort((a,b) => {
+      const pa = a.isProfumeria?1:0, pb = b.isProfumeria?1:0;
+      if(pa !== pb) return pb - pa;
+      return empMaxH(b) - empMaxH(a);
     });
+
+    oggi.forEach(emp => {
+      const pref = preferenzaDi(emp, dayKey);
+      const scelte = [...fasce].sort((f1,f2) => {
+        if(pref){ if(f1.id === pref) return -1; if(f2.id === pref) return 1 }
+        // alternanza: la fascia fatta meno volte passa avanti
+        const d = contaFasce[emp.id][f1.id] - contaFasce[emp.id][f2.id];
+        if(d !== 0) return d;
+        // a parità: la fascia meno affollata
+        return presenti(dayKey, f1.id) - presenti(dayKey, f2.id);
+      });
+      // prima fascia con capienza libera; se sono tutte piene si prende
+      // comunque la meno affollata (R2 prevale sulla contemporaneità)
+      const libera = scelte.find(f => presenti(dayKey, f.id) < capienza);
+      const scelta = libera || scelte.slice().sort((f1,f2) =>
+        presenti(dayKey,f1.id) - presenti(dayKey,f2.id))[0];
+      occupa(emp.id, dayKey, scelta);
+      registra(emp.id, scelta);
+      if(!libera)
+        warnings.push(`${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}): ${emp.name} inserito oltre il limite di ${capienza} persone in contemporanea per non lasciare la giornata senza turno.`);
+    });
+
+    // R4: se nessuna esperta copre il giorno, segnalalo
+    const profOggi = avail.some(e => e.isProfumeria &&
+      (fasceDi(e.id,dayKey).length || lavoraFisso(e.id,dayKey)));
+    if(avail.some(e => e.isProfumeria) && !profOggi)
+      warnings.push(`🌸 ${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}): nessuna esperta di profumeria in turno (riposo o assenza).`);
   });
 
-  // Avviso: giornate lavorative rimaste senza turno (equivalgono a un secondo riposo)
-  presenzaEmps.forEach(emp=>{
-    const vuoti=openDays.filter(dk=>dayAvailable(emp,dk)&&!hasShiftOn(dk,emp.id));
-    if(vuoti.length){
-      warnings.push(`⚠️ ${emp.name} (${weekRange(weekStartISO)}): ${vuoti.map(d=>DAYS_FULL[DAYS_KEY.indexOf(d)]).join(', ')} senza alcun turno — equivale a un secondo riposo. Limite "persone in contemporanea" (${S.maxConcurrentTotal||'—'}) troppo basso per il personale disponibile.`);
-    }
-  });
+  /* ═══ 6. ORE CONTRATTUALI — R7 ════════════════════════════════════
+     Si aggiungono seconde fasce a chi è sotto contratto e si accorciano
+     i turni a chi è sopra. Le fasce base non si tolgono mai (R2).   */
+  const oreDi = id => Object.keys(A[id]).reduce((tot,k) =>
+    tot + A[id][k].reduce((t,f) => t + (f.e - f.s)/60, 0), 0);
 
-  // ── PASSO 4: DIRETTORE SOSTITUISCE GLI STRAORDINARI ECCESSIVI ──
-  // Se un dipendente flex ha più di 3h di straordinario, il direttore subentra
-  // in quei turni extra: riduce il turno del flex e si aggiunge lui per coprire.
-  // Rispetta le regole del direttore: max 3h/giorno aggiuntive, domenica libera,
-  // non sovrapposto ai suoi turni fissi.
-  const OT_THRESHOLD=3; // h di straordinario tollerato prima dell'intervento direttore
-  const MAX_DIR_DAY_MIN=180; // max 3h tappabuchi/giorno per il direttore
-
-  const directors=avail.filter(e=>e.isDirectore);
-  if(directors.length>0){
-    directors.forEach(dir=>{
-      // Per ogni dipendente flex con straordinario > soglia
-      flexEmps.forEach(emp=>{
-        const contract=empMaxH(emp);
-        if(contract<=0)return;
-        const totalWorked=worked[emp.id]||0;
-        const totalOT=totalWorked-contract;
-        if(totalOT<=OT_THRESHOLD+0.1)return; // sotto soglia, lascia stare
-        let otToReplace=totalOT-OT_THRESHOLD; // ore da trasferire al direttore
-
-        // Scorre i giorni con turni oltre il contratto (partendo da quello con più ore)
-        const dayTotals=openDays.filter(k=>k!=='sun').map(k=>{
-          const h=sch.days[k].shifts.filter(s=>s.employeeId===emp.id).reduce((s,x)=>s+(x.hours||0),0);
-          return {k,h};
-        }).filter(x=>x.h>0).sort((a,b)=>b.h-a.h); // più carico prima
-
-        for(const {k:dayKey} of dayTotals){
-          if(otToReplace<=0.1)break;
-          if(dayKey==='sun')continue;
-
-          // Quante ore NON-fisse ha già il direttore oggi?
-          // Conta sia i tappabuchi area-scoperta (coverDirectorGaps) sia quelli del PASSO 4.
-          // Il turno fisso viene escluso perché non conta nel limite 3h tappabuchi.
-          const dirFixedToday=sch.days[dayKey].shifts
-            .filter(s=>s.employeeId===dir.id&&!s.directorGap).reduce((s,x)=>s+(x.hours||0),0);
-          const dirTotalToday=sch.days[dayKey].shifts
-            .filter(s=>s.employeeId===dir.id).reduce((s,x)=>s+(x.hours||0),0);
-          const dirGapToday=dirTotalToday-dirFixedToday; // ore tappabuchi oggi
-          const dirRoomMin=MAX_DIR_DAY_MIN-dirGapToday*60;
-          if(dirRoomMin<30)continue; // direttore già pieno questo giorno
-
-          // Trova il turno più lungo del flex in quel giorno (quello extra-contratto)
-          const empShiftsDay=sch.days[dayKey].shifts
-            .filter(s=>s.employeeId===emp.id)
-            .sort((a,b)=>(b.hours||0)-(a.hours||0));
-          if(!empShiftsDay.length)continue;
-
-          for(const shift of empShiftsDay){
-            if(otToReplace<=0.1)break;
-            // Quanto possiamo tagliare da questo turno?
-            // Taglia dalla coda: riduce endTime del turno del flex
-            const shiftH=shift.hours||0;
-            const minKeep=Math.max(MIN_SHIFT_M/60,0.5); // lascia almeno 30min
-            const cuttable=shiftH-minKeep; // max tagliabile
-            if(cuttable<=0.1)continue;
-
-            // Quanto tagliamo: min(da-rimpiazzare, tagliabile, room-direttore)
-            const cut=Math.min(otToReplace,cuttable,dirRoomMin/60);
-            if(cut<0.25)continue;
-
-            // Controlla che il direttore non sia già in turno in quell'orario
-            const cutStartM=t2m(shift.endTime)-Math.round(cut*60);
-            const cutEndM=t2m(shift.endTime);
-            const dirBusy=sch.days[dayKey].shifts.some(s=>
-              s.employeeId===dir.id&&t2m(s.startTime)<cutEndM&&t2m(s.endTime)>cutStartM
-            );
-            if(dirBusy)continue;
-
-            // Esegui il taglio: accorcia il turno del flex
-            const oldEnd=shift.endTime;
-            shift.endTime=m2t(cutStartM);
-            shift.hours=(shift.hours||0)-cut;
-            worked[emp.id]=(worked[emp.id]||0)-cut;
-
-            // Assegna il blocco tagliato al direttore
-            const areaId=shift.areaId||(S.areas[0]||{id:''}).id;
-            sch.days[dayKey].shifts.push({
-              employeeId:dir.id,
-              startTime:m2t(cutStartM),
-              endTime:oldEnd,
-              areaId,
-              hours:cut,
-              directorGap:true
+  // 6a — aggiungi seconde fasce
+  let cambiato = true;
+  while(cambiato){
+    cambiato = false;
+    flex.map(e => ({e, mancano: empMaxH(e) - oreDi(e.id)}))
+        .filter(x => x.mancano > MIN_FASCIA_H - 0.01)
+        .sort((a,b) => b.mancano - a.mancano)
+        .forEach(({e}) => {
+          const giorni = giorniLavoro(e).filter(k => k !== 'sun' && fasceDi(e.id,k).length === 1);
+          if(!giorni.length) return;
+          // giorno/fascia con più spazio, rispettando l'alternanza
+          let best = null;
+          giorni.forEach(k => {
+            fasceDelGiorno(k).forEach(f => {
+              if(fasceDi(e.id,k).some(x => x.id === f.id)) return;
+              if(presenti(k, f.id) >= capienza) return;
+              const punteggio = presenti(k, f.id) + contaFasce[e.id][f.id];
+              if(!best || punteggio < best.punteggio) best = {k, f, punteggio};
             });
-            worked[dir.id]=(worked[dir.id]||0)+cut;
-            otToReplace-=cut;
-          }
-        }
+          });
+          if(!best) return;
+          occupa(e.id, best.k, best.f);
+          registra(e.id, best.f);
+          cambiato = true;
+        });
+  }
+
+  /* ═══ 7. DA FASCE A TURNI ═════════════════════════════════════════
+     Le fasce diventano turni veri. Fasce contigue (orario continuato)
+     si uniscono. Le ore in eccesso si tolgono accorciando i turni,
+     mai sotto la presenza minima.                                   */
+  const MAX_GIORNO_M = 480;   // massimo 8h di lavoro al giorno
+  const MAX_CONSEC_M = 360;   // massimo 6h consecutive, poi pausa
+  const PAUSA_M      = 120;   // pausa obbligatoria fra due turni
+
+  avail.forEach(emp => {
+    Object.keys(A[emp.id]).forEach(dayKey => {
+      const lista = A[emp.id][dayKey].slice().sort((a,b) => a.s - b.s);
+      // unione delle fasce contigue (orario continuato)
+      const uniti = [];
+      lista.forEach(f => {
+        const ultimo = uniti[uniti.length-1];
+        if(ultimo && f.s === ultimo.e) ultimo.e = f.e;
+        else uniti.push({s:f.s, e:f.e});
       });
-    });
-  }
-
-  // ── Avviso copertura profumeria (priorità 1) ──
-  if(avail.some(e=>e.isProfumeria)){
-    openDays.forEach(dk=>{
-      const covered=sch.days[dk].shifts.some(s=>{const e=getEmp(s.employeeId);return e&&e.isProfumeria});
-      if(!covered){
-        warnings.push(`🌸 ${DAYS_FULL[DAYS_KEY.indexOf(dk)]} (${weekRange(weekStartISO)}): giornata SENZA esperta profumeria — verificare riposi/ferie.`);
+      // cap giornaliero: si accorcia partendo dall'ultimo blocco
+      let totale = uniti.reduce((t,b) => t + (b.e-b.s), 0);
+      for(let i = uniti.length-1; i >= 0 && totale > MAX_GIORNO_M; i--){
+        const b = uniti[i];
+        const taglio = Math.min(totale - MAX_GIORNO_M, (b.e-b.s) - MIN_FASCIA_H*60);
+        if(taglio > 0){ b.e -= taglio; totale -= taglio }
       }
+      // nessun blocco oltre 6h consecutive: si spezza con una pausa di 2h
+      const finali = [];
+      uniti.forEach(b => {
+        const spazio = b.e - b.s;
+        if(spazio <= MAX_CONSEC_M){ finali.push(b); return }
+        let lavoro = Math.min(spazio, MAX_GIORNO_M);
+        if(spazio - lavoro < PAUSA_M) lavoro = spazio - PAUSA_M;   // serve spazio per la pausa
+        if(lavoro <= MAX_CONSEC_M){ finali.push({s:b.s, e:b.s + Math.max(lavoro, MIN_FASCIA_H*60)}); return }
+        const t1 = Math.min(Math.ceil(lavoro/2), MAX_CONSEC_M);
+        const t2 = Math.min(lavoro - t1, MAX_CONSEC_M);
+        finali.push({s:b.s, e:b.s + t1});
+        const inizio2 = b.s + t1 + PAUSA_M;
+        if(t2 >= MIN_FASCIA_H*60 && inizio2 + t2 <= b.e) finali.push({s:inizio2, e:inizio2 + t2});
+      });
+      A[emp.id][dayKey] = finali;
     });
-  }
+  });
 
-  // ── Avviso turni poco variati (mattine/pomeriggi) ──
-  flexEmps.forEach(e=>{
-    const st=computeSlotStats(7)[e.id];
-    if(!st)return;
-    const tot=st.morning+st.afternoon;
-    if(tot>=4&&(st.morning===0||st.afternoon===0)){
-      warnings.push(`🔁 ${e.name} (${weekRange(weekStartISO)}): sempre ${st.afternoon===0?'di mattina':'di pomeriggio'} (${tot} giorni) — variazione non possibile con i vincoli attuali.`);
+  // taglio delle ore eccedenti il contratto
+  flex.forEach(emp => {
+    const maxH = empMaxH(emp);
+    if(maxH <= 0) return;
+    let extra = Math.round((oreDi(emp.id) - maxH) * 60);
+    if(extra <= 0) return;
+    // si accorciano prima i giorni più carichi, mai sotto 2h di presenza
+    const giorni = Object.keys(A[emp.id])
+      .filter(k => k !== 'sun')
+      .sort((a,b) => {
+        const ha = A[emp.id][b].reduce((t,x)=>t+(x.e-x.s),0);
+        const hb = A[emp.id][a].reduce((t,x)=>t+(x.e-x.s),0);
+        return ha - hb;
+      });
+    for(const k of giorni){
+      if(extra <= 0) break;
+      const blocchi = A[emp.id][k].slice().sort((a,b) => (b.e-b.s) - (a.e-a.s));
+      for(const b of blocchi){
+        if(extra <= 0) break;
+        const durata = b.e - b.s;
+        const tagliabile = Math.max(0, durata - MIN_FASCIA_H*60);
+        const taglio = Math.min(tagliabile, extra);
+        if(taglio < 15) continue;
+        b.e -= taglio;
+        extra -= taglio;
+      }
     }
   });
 
-  // ── Avvisi straordinari ──
-  flexEmps.forEach(e=>{
-    const ot=Math.round((overtimeH[e.id]||0)*10)/10;
-    if(ot>0){
-      warnings.push(`📌 STRAORDINARI — ${e.name}: +${ot}h questa settimana (ore extra per copertura negozio)`);
-    }
+  /* ═══ 8. CAMION ═══════════════════════════════════════════════════
+     Nei giorni di consegna chi la riceve entra alle 07:00 e resta
+     almeno fino alle 11:00.                                         */
+  feriali.concat(sundayOpen?['sun']:[]).forEach(dayKey => {
+    if(!(S.camionDays && S.camionDays[dayKey])) return;
+    const sh = S.storeHours[dayKey];
+    const camionista = avail.find(e => e.takesMorningDelivery &&
+      A[e.id][dayKey] && A[e.id][dayKey].length);
+    if(!camionista) return;
+    const blocchi = A[camionista.id][dayKey].sort((a,b) => a.s - b.s);
+    const primo = blocchi[0];
+    if(primo.s <= t2m('07:00')) return;
+    primo.s = t2m('07:00');
+    if(primo.e < t2m('11:00')) primo.e = Math.min(t2m('11:00'), t2m(sh.type==='split'?sh.me:sh.ae));
+    // anche entrando alle 07:00 restano validi i limiti: max 6h consecutive
+    if(primo.e - primo.s > 360) primo.e = primo.s + 360;
   });
 
-  // ── Avviso ore mancanti ──
-  flexEmps.forEach(e=>{
-    const maxH=empMaxH(e); if(!maxH)return;
-    const workedWithOt=(worked[e.id]||0);
-    const contractual=Math.min(workedWithOt,maxH);
-    const missing=Math.round((maxH-contractual)*10)/10;
-    if(missing>0.5) warnings.push(`${weekRange(weekStartISO)}: ${e.name} — ${missing}h mancanti (${Math.round(contractual*10)/10}h su ${maxH}h contratto)`);
+  /* ═══ 9. TURNI FISSI + DIRETTORE ══════════════════════════════════ */
+  [...fissi, ...direttori].forEach(emp => {
+    Object.keys(turniFissi[emp.id] || {}).forEach(k => {
+      if(k === riposo[emp.id]) return;               // mai turni nel riposo
+      A[emp.id][k] = (turniFissi[emp.id][k] || []).map(t => ({s:t.s, e:t.e, areaId:t.areaId}));
+    });
   });
 
-  // ── PULIZIA FINALE DEI TURNI ──
-  // 1) ogni turno deve stare dentro una fascia di apertura del negozio (mattina o
-  //    pomeriggio): i turni che sbordano vengono tagliati, quelli che restano troppo
-  //    corti eliminati. Fanno eccezione i turni camion delle 07:00 e i turni fissi.
-  // 2) nessun turno sovrapposto per lo stesso dipendente: il secondo viene accorciato.
-  DAYS_KEY.forEach(dk=>{
-    if(!sch.days[dk])return;
-    const shd=S.storeHours[dk];
-    if(!shd||!shd.open){sch.days[dk].shifts=[];return}
-    const fasce=shd.type==='split'
-      ? [[t2m(shd.ms),t2m(shd.me)],[t2m(shd.as),t2m(shd.ae)]]
-      : [[t2m(shd.ms),t2m(shd.ae)]];
-    const fixedIds=new Set(fixedEmps.map(e=>e.id));
-    sch.days[dk].shifts=sch.days[dk].shifts.filter(x=>{
-      if(x.startTime==='07:00'||fixedIds.has(x.employeeId))return true; // camion / orario fisso
-      const sM=t2m(x.startTime),eM=t2m(x.endTime);
-      // fascia con maggiore sovrapposizione
-      let best=null;
-      fasce.forEach(([fS,fE])=>{
-        const ov=Math.min(eM,fE)-Math.max(sM,fS);
-        if(ov>0&&(!best||ov>best.ov))best={fS,fE,ov};
+  // il direttore garantisce la presenza nei giorni in cui non ha turno
+  // fisso (max 3h/giorno, mai di domenica)
+  direttori.forEach(dir => {
+    giorniLavoro(dir).filter(k => k !== 'sun').forEach(dayKey => {
+      if(A[dir.id][dayKey] && A[dir.id][dayKey].length) return;
+      const fasce = fasceDelGiorno(dayKey);
+      if(!fasce.length) return;
+      const f = fasce.slice().sort((a,b) =>
+        (contaFasce[dir.id][a.id] - contaFasce[dir.id][b.id]) ||
+        (presenti(dayKey,a.id) - presenti(dayKey,b.id)))[0];
+      const durata = Math.min(f.e - f.s, 180);
+      A[dir.id][dayKey] = [{s:f.s, e:f.s + durata}];
+      contaFasce[dir.id][f.id]++;
+    });
+  });
+
+  /* ═══ 10. AREE ════════════════════════════════════════════════════ */
+  const nonMag = S.areas.filter(a => !isMagazzino(a));
+  const mag    = S.areas.filter(a => isMagazzino(a));
+  const areaProf = S.areas.find(isProfArea);
+  const ordinate = [...nonMag, ...mag];
+  if(!S.areas.length)
+    warnings.push('⚠️ Nessuna area configurata — i turni non hanno area assegnata.');
+
+  openDays.forEach(dayKey => {
+    // tutti i turni del giorno, in ordine di inizio
+    const turni = [];
+    avail.forEach(e => (A[e.id][dayKey]||[]).forEach(b => turni.push({emp:e, b})));
+    turni.sort((x,y) => x.b.s - y.b.s);
+    const conteggio = {}; S.areas.forEach(a => conteggio[a.id] = []);
+    turni.forEach(({emp, b}) => {
+      if(b.areaId) return;                                // orario fisso: area già scelta
+      const sovrapposti = a => (conteggio[a.id]||[])
+        .filter(x => x.s < b.e && x.e > b.s).length;
+      const capiente = a => sovrapposti(a) < (a.maxConcurrent || 99);
+      let scelta = null;
+      if(emp.isProfumeria && areaProf && capiente(areaProf)) scelta = areaProf;
+      if(!scelta) scelta = ordinate.find(a => sovrapposti(a) === 0 && capiente(a));
+      if(!scelta) scelta = ordinate.find(a => capiente(a));
+      if(!scelta) scelta = S.areas[0];
+      if(scelta){ b.areaId = scelta.id; (conteggio[scelta.id]=conteggio[scelta.id]||[]).push(b) }
+    });
+  });
+
+  /* ═══ 11. SCRITTURA DEI TURNI ═════════════════════════════════════ */
+  avail.forEach(emp => {
+    const maxH = empMaxH(emp);
+    Object.keys(A[emp.id]).forEach(dayKey => {
+      (A[emp.id][dayKey]||[]).forEach(b => {
+        const h = (b.e - b.s)/60;
+        if(h <= 0) return;
+        const prima = worked[emp.id];
+        const isOT = maxH > 0 && prima + h > maxH;
+        sch.days[dayKey].shifts.push({
+          employeeId: emp.id,
+          startTime : m2t(b.s),
+          endTime   : m2t(b.e),
+          areaId    : b.areaId || '',
+          hours     : h,
+          overtime  : isOT || undefined,
+          sundayFull: dayKey === 'sun' ? true : undefined
+        });
+        worked[emp.id] = prima + h;
+        if(isOT) overtimeH[emp.id] += Math.min(h, prima + h - maxH);
       });
-      if(!best)return false;                       // turno completamente fuori orario
-      const nS=Math.max(sM,best.fS),nE=Math.min(eM,best.fE);
-      if(nE-nS<60)return false;                    // residuo troppo corto
-      if(nS!==sM||nE!==eM){
-        const oldH=x.hours||0;
-        x.startTime=m2t(nS);x.endTime=m2t(nE);x.hours=shiftH(x.startTime,x.endTime);
-        worked[x.employeeId]=(worked[x.employeeId]||0)-oldH+x.hours;
-      }
-      return true;
     });
-    // sovrapposizioni dello stesso dipendente
-    const byEmp={};
-    sch.days[dk].shifts.forEach(x=>{(byEmp[x.employeeId]=byEmp[x.employeeId]||[]).push(x)});
-    Object.keys(byEmp).forEach(eid=>{
-      const list=byEmp[eid].sort((a,b)=>t2m(a.startTime)-t2m(b.startTime));
-      for(let i=0;i<list.length-1;i++){
-        const cur=list[i],nxt=list[i+1];
-        if(t2m(nxt.startTime)<t2m(cur.endTime)){
-          const oldH=nxt.hours||0;
-          const newS=t2m(cur.endTime);
-          if(newS>=t2m(nxt.endTime)-30){          // resterebbe nulla → elimina
-            sch.days[dk].shifts=sch.days[dk].shifts.filter(x=>x!==nxt);
-            worked[eid]=(worked[eid]||0)-oldH;
-            list.splice(i+1,1);i--;
-          } else {
-            nxt.startTime=m2t(newS);
-            nxt.hours=shiftH(nxt.startTime,nxt.endTime);
-            worked[eid]=(worked[eid]||0)-oldH+nxt.hours;
-          }
-        }
-      }
-    });
+    // un turno nel giorno di riposo non può esistere
+    const r = riposo[emp.id];
+    if(r) sch.days[r].shifts = sch.days[r].shifts.filter(s => s.employeeId !== emp.id);
   });
 
-  // ── CONTROLLO FINALE: un solo giorno di riposo a settimana ──
-  avail.forEach(e=>enforceSingleRest(sch.days,e.id,null,weekStartISO));
+  /* ═══ 12. AVVISI ══════════════════════════════════════════════════ */
+  flex.forEach(e => {
+    const maxH = empMaxH(e);
+    if(maxH <= 0) return;
+    const mancano = Math.round((maxH - worked[e.id]) * 10)/10;
+    if(mancano > 0.5)
+      warnings.push(`${weekRange(weekStartISO)}: ${e.name} — ${mancano}h mancanti (${Math.round(worked[e.id]*10)/10}h su ${maxH}h contratto).`);
+    const ot = Math.round(overtimeH[e.id] * 10)/10;
+    if(ot > 0)
+      warnings.push(`📌 STRAORDINARI — ${e.name}: +${ot}h questa settimana.`);
+  });
+  avail.forEach(emp => {
+    const vuoti = giorniLavoro(emp).filter(k => !sch.days[k].shifts.some(s => s.employeeId === emp.id));
+    if(vuoti.length)
+      warnings.push(`⚠️ ${emp.name} (${weekRange(weekStartISO)}): ${vuoti.map(nomeGiorno).join(', ')} senza turno${emp.hoursType==='fixed'?' — completare l\'orario fisso nella scheda del dipendente':''}.`);
+  });
 
-  // Allega dati straordinari al risultato per visualizzazione
-  return {weekStart:weekStartISO,days:sch.days,worked,overtimeH};
+  // memoria per la rotazione dei riposi
+  avail.forEach(e => { if(riposo[e.id]) restHistory[e.id] = riposo[e.id] });
+
+  return {weekStart:weekStartISO, days:sch.days, worked, overtimeH};
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   VERIFICA REGOLE — usata dall'interfaccia per mostrare le violazioni
+   Ritorna un elenco di stringhe (vuoto = orario conforme).
+   ═══════════════════════════════════════════════════════════════════ */
+function verificaRegole(sch){
+  const errori = [];
+  if(!sch || !sch.days) return errori;
+  const ws = new Date(sch.weekStart+'T00:00:00');
+  const openDays = DAYS_KEY.filter(k => S.storeHours[k] && S.storeHours[k].open && sch.days[k]);
+  const dateOf = k => isoDate(addDays(ws, DAYS_KEY.indexOf(k)));
+
+  S.employees.forEach(emp => {
+    if(isOnVacation(emp, sch.weekStart)) return;
+    const turni = k => sch.days[k].shifts.filter(s => s.employeeId === emp.id);
+    const disponibili = openDays.filter(k => !assente(emp, dateOf(k)));
+    const senzaTurno  = disponibili.filter(k => !turni(k).length);
+
+    if(senzaTurno.length > 1)
+      errori.push(`<strong>${esc(emp.name)}</strong>: ${senzaTurno.length} giorni senza turno (${senzaTurno.map(k=>DAYS_FULL[DAYS_KEY.indexOf(k)]).join(', ')}) — il riposo deve essere uno solo.`);
+    if(senzaTurno.length === 0 && disponibili.length === openDays.length)
+      errori.push(`<strong>${esc(emp.name)}</strong>: nessun giorno di riposo settimanale.`);
+    if(senzaTurno.length === 1 && openDays.includes('sun')){
+      const lavoraDom = turni('sun').length > 0;
+      if(!lavoraDom && senzaTurno[0] !== 'sun')
+        errori.push(`<strong>${esc(emp.name)}</strong>: riposa di ${DAYS_FULL[DAYS_KEY.indexOf(senzaTurno[0])]} pur non lavorando la domenica.`);
+    }
+    // turni dentro l'orario del negozio e senza sovrapposizioni
+    openDays.forEach(k => {
+      const sh = S.storeHours[k];
+      const fasce = sh.type === 'split'
+        ? [[t2m(sh.ms),t2m(sh.me)],[t2m(sh.as),t2m(sh.ae)]]
+        : [[t2m(sh.ms),t2m(sh.ae)]];
+      const list = turni(k).slice().sort((a,b) => t2m(a.startTime) - t2m(b.startTime));
+      list.forEach((s,i) => {
+        const dentro = fasce.some(([a,b]) => t2m(s.startTime) >= a && t2m(s.endTime) <= b)
+                    || s.startTime === '07:00';
+        if(!dentro)
+          errori.push(`<strong>${esc(emp.name)}</strong>: ${DAYS_FULL[DAYS_KEY.indexOf(k)]} turno ${s.startTime}–${s.endTime} fuori dall'orario del negozio.`);
+        const succ = list[i+1];
+        if(succ && t2m(succ.startTime) < t2m(s.endTime))
+          errori.push(`<strong>${esc(emp.name)}</strong>: ${DAYS_FULL[DAYS_KEY.indexOf(k)]} turni sovrapposti.`);
+      });
+    });
+  });
+  return errori;
 }
 
 /* ═══════════════ MULTI-WEEK GENERATION ═══════════════ */
@@ -2863,29 +1903,10 @@ function renderSchedule(){
   // ── DIAGNOSI GIORNI NON LAVORATI ──
   // Il riposo deve essere UNO. Se un dipendente ha più giornate senza turni (riposo +
   // giornate vuote) viene segnalato qui sopra la tabella, con nome, giorni e motivo.
-  const diagn=[];
-  S.employees.forEach(emp=>{
-    if(isOnVacation(emp,sch.weekStart))return;
-    const odD=DAYS_KEY.filter(k=>S.storeHours[k]&&S.storeHours[k].open&&sch.days[k]);
-    const liberi=odD.filter((k,ki)=>{
-      const dDate=isoDate(addDays(ws,DAYS_KEY.indexOf(k)));
-      if((emp.daysOff||[]).includes(dDate))return false;      // assenza
-      if((emp.permissionDays||[]).includes(dDate))return false; // permesso
-      if(isOnVacationDay(emp,dDate))return false;             // ferie
-      return !sch.days[k].shifts.some(x=>x.employeeId===emp.id);
-    });
-    if(liberi.length>1){
-      const nomi=liberi.map(k=>DAYS_FULL[DAYS_KEY.indexOf(k)]).join(', ');
-      const causa=emp.hoursType==='fixed'
-        ? 'orario fisso: aggiungi i giorni mancanti nella scheda del dipendente'
-        : `capienza insufficiente: alza "max persone in contemporanea" (ora ${S.maxConcurrentTotal||'—'}) o riduci il personale in organico`;
-      diagn.push(`<strong>${esc(emp.name)}</strong>: ${liberi.length} giornate senza turno (${nomi}) — ${causa}`);
-    }
-  });
-
+  const diagn=verificaRegole(sch);
   let html='';
   if(diagn.length&&!isReadOnly){
-    html+=`<div class="alert alert-warning" style="margin-bottom:12px"><strong>⚠️ Giorni di riposo doppi (${diagn.length}):</strong> il riposo settimanale deve essere uno solo.<ul style="margin-top:6px;padding-left:18px;line-height:1.8">${diagn.map(d=>`<li>${d}</li>`).join('')}</ul></div>`;
+    html+=`<div class="alert alert-warning" style="margin-bottom:12px"><strong>⚠️ Regole non rispettate (${diagn.length}):</strong><ul style="margin-top:6px;padding-left:18px;line-height:1.8">${diagn.map(d=>`<li>${d}</li>`).join('')}</ul></div>`;
   }
   html+=`<div class="sch-grid"><table class="sch-table"><thead><tr><th class="emp-col">Dipendente</th>`;
 
@@ -3701,223 +2722,13 @@ function confirmRefreshEmp(empId){
 
 function refreshEmpSchedule(empId){
   const emp=getEmp(empId);if(!emp)return;
-  const restPrefLocal=['mon','tue','wed','thu','fri','sat','sun'];
-  let lastRest=null;
-
-  S.weekSchedules.forEach((sch,weekIdx)=>{
-    const weekStartISO=sch.weekStart;
-    const weekStart=new Date(weekStartISO+'T00:00:00');
-
-    // Strip employee from all days
-    DAYS_KEY.forEach(k=>{
-      if(!sch.days[k])sch.days[k]={shifts:[],dayOff:[]};
-      sch.days[k].shifts=sch.days[k].shifts.filter(s=>s.employeeId!==empId);
-      sch.days[k].dayOff=sch.days[k].dayOff.filter(id=>id!==empId);
-    });
-
-    // Mark closed days
-    DAYS_KEY.filter(k=>!S.storeHours[k]||!S.storeHours[k].open).forEach(k=>{
-      if(!sch.days[k].dayOff.includes(empId))sch.days[k].dayOff.push(empId);
-    });
-
-    // On vacation this week → skip (no shifts)
-    if(isOnVacation(emp,weekStartISO))return;
-
-    const openDays=DAYS_KEY.filter(k=>S.storeHours[k]&&S.storeHours[k].open);
-
-    if(emp.hoursType==='fixed'){
-      // Biweekly A/B support
-      const hasBiweekly=emp.fixedScheduleB&&emp.fixedScheduleB.length>0;
-      let activeSch=emp.fixedSchedule||[];
-      if(hasBiweekly){
-        const startOffset=emp.biweeklyFirstWeek==='B'?1:0;
-        if((weekIdx+startOffset)%2===1)activeSch=emp.fixedScheduleB;
-      }
-      const effectiveSch=emp.isDirectore?activeSch.filter(fs=>fs.day!=='sun'):activeSch;
-      effectiveSch.forEach(fs=>{
-        const dk=fs.day;
-        if(!sch.days[dk]||!S.storeHours[dk]||!S.storeHours[dk].open)return;
-        if(fs.type==='split'&&fs.startTime2&&fs.endTime2){
-          sch.days[dk].shifts.push({employeeId:empId,startTime:fs.startTime,endTime:fs.endTime,areaId:fs.areaId||'',hours:shiftH(fs.startTime,fs.endTime)});
-          sch.days[dk].shifts.push({employeeId:empId,startTime:fs.startTime2,endTime:fs.endTime2,areaId:fs.areaId2||fs.areaId||'',hours:shiftH(fs.startTime2,fs.endTime2)});
-        } else {
-          sch.days[dk].shifts.push({employeeId:empId,startTime:fs.startTime,endTime:fs.endTime,areaId:fs.areaId||'',hours:shiftH(fs.startTime,fs.endTime)});
-        }
-      });
-      const workedDays=[...new Set(effectiveSch.map(fs=>fs.day))];
-      let restDay;
-      // Riposo settimanale: un solo giorno. Chi non lavora la domenica riposa DI domenica;
-      // chi lavora la domenica riposa in un altro giorno (lun-sab).
-      if(openDays.includes('sun')&&(emp.isDirectore||!workedDays.includes('sun'))){
-        restDay='sun';
-      } else {
-        const weekPoolF=openDays.filter(d=>d!=='sun');
-        restDay=weekPoolF.find(d=>!workedDays.includes(d)&&d!==lastRest)
-              ||weekPoolF.find(d=>!workedDays.includes(d))
-              ||openDays.find(d=>!workedDays.includes(d));
-      }
-      if(restDay&&!sch.days[restDay].dayOff.includes(empId))sch.days[restDay].dayOff.push(empId);
-      lastRest=restDay;
-    } else {
-      // Flex employee — pick rest day (rotate, prefer less-crowded days)
-      const restCount={};
-      openDays.forEach(d=>{restCount[d]=(sch.days[d].dayOff||[]).filter(id=>id!==empId).length});
-      const weekEndISOr=isoDate(addDays(weekStart,6));
-      const prefThisWeek=(emp.datePreferences||[]).find(p=>p.date>=weekStartISO&&p.date<=weekEndISOr);
-      const prefDayKey=prefThisWeek?DAYS_KEY[(new Date(prefThisWeek.date+'T00:00:00').getDay()+6)%7]:null;
-      let restDay;
-      // Lavora questa domenica? Solo se il negozio è aperto, il dipendente è presente e
-      // la domenica non ha già i 3 addetti previsti. Chi NON lavora la domenica ha la
-      // domenica come (unico) giorno di riposo settimanale.
-      const sunDateR=isoDate(addDays(weekStart,6));
-      const absentSunR=(emp.daysOff||[]).includes(sunDateR)||(emp.permissionDays||[]).includes(sunDateR)||isOnVacationDay(emp,sunDateR);
-      const sunStaffed=new Set(((sch.days['sun']||{shifts:[]}).shifts||[]).map(s=>s.employeeId)).size;
-      const worksSundayR=openDays.includes('sun')&&!emp.isDirectore&&!absentSunR&&sunStaffed<3;
-      if(openDays.includes('sun')&&!worksSundayR&&!absentSunR){
-        restDay='sun';
-      } else {
-        let restPool=[...openDays].filter(d=>d!=='sun');
-        if(restPool.length===0)restPool=[...openDays];
-        // Il dipendente camion non può riposare nei giorni camion
-        if(emp.takesMorningDelivery){
-          const noCam=restPool.filter(d=>!(S.camionDays&&S.camionDays[d]));
-          if(noCam.length>0)restPool=noCam;
-        }
-        const sortedForRest=[...restPool].sort((a,b)=>{
-          const penA=(a===lastRest?100:0)+(restCount[a]||0);
-          const penB=(b===lastRest?100:0)+(restCount[b]||0);
-          if(penA!==penB)return penA-penB;
-          return restPrefLocal.indexOf(a)-restPrefLocal.indexOf(b);
-        });
-        restDay=sortedForRest[0];
-      }
-      if(restDay)sch.days[restDay].dayOff.push(empId);
-      lastRest=restDay;
-
-      // Assign shifts on working days
-      const maxH=empMaxH(emp);
-      let workedH=0;
-
-      // ── Preferenza di turno (data + mattina/pomeriggio): pre-assegna prima del riempimento normale ──
-      let prefWorkDay=null;
-      if(prefThisWeek&&prefDayKey&&prefDayKey!=='sun'&&prefDayKey!==restDay&&openDays.includes(prefDayKey)){
-        const dayKeyP=prefDayKey;
-        const okAbsence=!(emp.daysOff||[]).includes(prefThisWeek.date)&&!(emp.permissionDays||[]).includes(prefThisWeek.date)&&!isOnVacationDay(emp,prefThisWeek.date);
-        const shP=S.storeHours[dayKeyP];
-        if(okAbsence&&shP&&shP.open){
-          let reqS,reqE;
-          if(shP.type==='split'){
-            if(prefThisWeek.slot==='afternoon'){reqS=t2m(shP.as);reqE=t2m(shP.ae);}
-            else{reqS=t2m(shP.ms);reqE=t2m(shP.me);}
-          } else {
-            const openM=t2m(shP.ms),closeM=t2m(shP.ae);const mid=openM+Math.round((closeM-openM)/2);
-            if(prefThisWeek.slot==='afternoon'){reqS=mid;reqE=closeM;}
-            else{reqS=openM;reqE=mid;}
-          }
-          const periodsP=shP.type==='split'?[[t2m(shP.ms),t2m(shP.me)],[t2m(shP.as),t2m(shP.ae)]]:[[t2m(shP.ms),t2m(shP.ae)]];
-          for(const [pS,pE] of periodsP){
-            if(maxH>0&&workedH>=maxH-0.1)break;
-            const s=Math.max(pS,reqS), e=Math.min(pE,reqE);
-            if(e-s<MIN_SHIFT_M)continue;
-            let durM=Math.min(e-s,6*60);
-            if(maxH>0){const remainM=Math.round((maxH-workedH)*60);durM=Math.min(durM,Math.max(remainM,0));}
-            if(durM<MIN_SHIFT_M)continue;
-            const endM=s+durM;
-            const areaCntP={};S.areas.forEach(a=>{areaCntP[a.id]=sch.days[dayKeyP].shifts.filter(x=>x.areaId===a.id).length});
-            let aIdP='';
-            if(emp.isProfumeria){const pA=S.areas.find(a=>a.name.toLowerCase().includes('profumeria'));if(pA)aIdP=pA.id}
-            if(!aIdP){const free=S.areas.find(a=>!areaCntP[a.id]);aIdP=free?free.id:(S.areas[0]||{id:''}).id}
-            const hP=shiftH(m2t(s),m2t(endM));
-            sch.days[dayKeyP].shifts.push({employeeId:empId,startTime:m2t(s),endTime:m2t(endM),areaId:aIdP,hours:hP,preferred:true});
-            workedH+=hP;
-          }
-          prefWorkDay=dayKeyP;
-        }
-      }
-
-      openDays.forEach(dayKey=>{
-        if(dayKey===restDay)return;
-        const dayIdx=DAYS_KEY.indexOf(dayKey);
-        const dayDate=isoDate(addDays(weekStart,dayIdx));
-        const sh=S.storeHours[dayKey];
-        // ferie per giorno specifico / assenze / permessi
-        if((emp.daysOff||[]).includes(dayDate)||(emp.permissionDays||[]).includes(dayDate)||isOnVacationDay(emp,dayDate)){
-          if(!sch.days[dayKey].dayOff.includes(empId))sch.days[dayKey].dayOff.push(empId);
-          return;
-        }
-        // DOMENICA: giornata piena rispettando l'orario del negozio
-        // (due turni se la domenica è a orario spezzato, uno solo se continuato)
-        if(dayKey==='sun'){
-          if(!worksSundayR)return; // domenica = riposo per questo dipendente
-          const areaCountS={};S.areas.forEach(a=>{areaCountS[a.id]=sch.days[dayKey].shifts.filter(s=>s.areaId===a.id).length});
-          let sunArea=S.areas.find(a=>!areaCountS[a.id])||S.areas[0]||{id:''};
-          const sunPeriodsR=sh.type==='split'?[[sh.ms,sh.me],[sh.as,sh.ae]]:[[sh.ms,sh.ae]];
-          sunPeriodsR.forEach(([pS,pE])=>{
-            const pH=shiftH(pS,pE);
-            if(pH<=0)return;
-            const isOTSun=maxH>0&&(workedH+pH)>maxH;
-            sch.days[dayKey].shifts.push({employeeId:empId,startTime:pS,endTime:pE,areaId:sunArea.id,hours:pH,sundayFull:true,overtime:isOTSun||undefined});
-            workedH+=pH;
-          });
-          return;
-        }
-        // GIORNO CON PREFERENZA GIÀ PRE-ASSEGNATA: riempi solo i periodi NON coperti
-        // dalla preferenza (es. se ha chiesto solo il pomeriggio, la mattina va comunque
-        // riempita normalmente), rispettando la pausa pranzo se il negozio è split.
-        if(dayKey===prefWorkDay){
-          if(maxH>0&&workedH>=maxH-0.1)return;
-          const periodsP=sh.type==='split'?[[t2m(sh.ms),t2m(sh.me)],[t2m(sh.as),t2m(sh.ae)]]:[[t2m(sh.ms),t2m(sh.ae)]];
-          for(const [pS,pE] of periodsP){
-            if(maxH>0&&workedH>=maxH-0.1)break;
-            // periodo già (parzialmente) coperto dalla preferenza? salta
-            const covered=sch.days[dayKey].shifts.some(s=>s.employeeId===empId&&t2m(s.startTime)<pE&&t2m(s.endTime)>pS);
-            if(covered)continue;
-            const remainingP=maxH>0?maxH-workedH:8;
-            if(remainingP<=0.1)continue;
-            const periodLenH=(pE-pS)/60;
-            const durH=Math.min(remainingP,periodLenH,6); // rispetta max 6h consecutive
-            const endMp=pS+Math.round(durH*60);
-            const actualHp=shiftH(m2t(pS),m2t(endMp));
-            if(actualHp<MIN_SHIFT_M/60)continue;
-            const areaCountP={};S.areas.forEach(a=>{areaCountP[a.id]=sch.days[dayKey].shifts.filter(s=>s.areaId===a.id).length});
-            let areaIdP='';
-            if(emp.isProfumeria){const pA=S.areas.find(a=>a.name.toLowerCase().includes('profumeria'));if(pA)areaIdP=pA.id}
-            if(!areaIdP){const unc=S.areas.find(a=>!areaCountP[a.id]);areaIdP=unc?unc.id:(S.areas[0]||{id:''}).id}
-            const isOTp=maxH>0&&(workedH+actualHp)>maxH;
-            sch.days[dayKey].shifts.push({employeeId:empId,startTime:m2t(pS),endTime:m2t(endMp),areaId:areaIdP,hours:actualHp,overtime:isOTp||undefined});
-            workedH+=actualHp;
-          }
-          return;
-        }
-        const remaining=maxH>0?maxH-workedH:8;
-        if(remaining<=0.1)return;
-        const totalH=dayH(sh);
-        const availH=Math.min(remaining,totalH);
-        // camion 07:00 solo nei giorni con consegna configurati
-        const isCamionDay=!!(S.camionDays&&S.camionDays[dayKey]);
-        const startTime=(emp.takesMorningDelivery&&isCamionDay&&t2m(sh.ms)>t2m('07:00'))?'07:00':sh.ms;
-        const endTime=m2t(Math.min(t2m(startTime)+availH*60,t2m(sh.ae)));
-        const actualH=shiftH(startTime,endTime);
-        if(actualH<MIN_SHIFT_M/60)return;
-        if(S.maxConcurrentTotal&&sch.days[dayKey].shifts.length>=S.maxConcurrentTotal)return;
-        const areaCountR={};S.areas.forEach(a=>{areaCountR[a.id]=sch.days[dayKey].shifts.filter(s=>s.areaId===a.id).length});
-        const areaFitsR=a=>{const mc=a.maxConcurrent;return !mc||(areaCountR[a.id]||0)<mc};
-        let areaId='';
-        if(emp.isProfumeria){const pA=S.areas.find(a=>a.name.toLowerCase().includes('profumeria'));if(pA&&areaFitsR(pA))areaId=pA.id}
-        if(!areaId){const unc=S.areas.find(a=>!areaCountR[a.id]&&areaFitsR(a));areaId=unc?unc.id:(S.areas.find(a=>areaFitsR(a))||S.areas[0]||{id:''}).id}
-        const base=empMaxH(emp);
-        const isOT=base>0&&(workedH+actualH)>base;
-        sch.days[dayKey].shifts.push({employeeId:empId,startTime,endTime,areaId,hours:actualH,overtime:isOT||undefined});
-        workedH+=actualH;
-      });
-    }
-
-    // Un solo giorno di riposo a settimana (regola unica)
-    enforceSingleRest(sch.days,empId,null,weekStartISO);
-  });
-
+  if(!S.weekSchedules||!S.weekSchedules.length){renderEmployees();return}
+  // Rigenerazione con il motore unico: evita regole duplicate e divergenti.
+  // Tutte le settimane correnti vengono ricalcolate con i dati aggiornati.
+  const warnings=[];const restHistory={};
+  S.weekSchedules=S.weekSchedules.map((wk,i)=>generateWeekSchedule(wk.weekStart,warnings,restHistory,i));
   save();renderSchedule();renderEmployees();
-  toast(`Orario di ${emp.name} aggiornato su ${S.weekSchedules.length} settimane ✓`);
+  toast(`Orario ricalcolato su ${S.weekSchedules.length} settimana/e ✓`);
 }
 
 /* ═══════════════ AREA MODAL ═══════════════ */
