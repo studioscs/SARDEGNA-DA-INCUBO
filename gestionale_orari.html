@@ -898,12 +898,20 @@ function setWeekFromPicker(v){
 // generazione, alla rigenerazione del singolo dipendente, alle modifiche manuali e agli
 // orari già salvati. `keep` indica un giorno scelto a mano da preferire.
 // Ritorna il giorno di riposo assegnato (o null se non è stato possibile assegnarlo).
-function enforceSingleRest(days,empId,keep){
+function enforceSingleRest(days,empId,keep,weekStartISO){
   if(!days)return null;
   const openDays=DAYS_KEY.filter(k=>S.storeHours[k]&&S.storeHours[k].open&&days[k]);
   if(!openDays.length)return null;
   const hasRest =k=>days[k]&&(days[k].dayOff||[]).includes(empId);
   const hasShift=k=>days[k]&&(days[k].shifts||[]).some(s=>s.employeeId===empId);
+  // Un giorno di assenza/permesso/ferie non è un riposo: se conosciamo la settimana,
+  // il riposo viene collocato preferibilmente su un giorno effettivamente disponibile.
+  const empR=getEmp(empId);
+  const assente=k=>{
+    if(!weekStartISO||!empR)return false;
+    const d=isoDate(addDays(new Date(weekStartISO+'T00:00:00'),DAYS_KEY.indexOf(k)));
+    return (empR.daysOff||[]).includes(d)||(empR.permissionDays||[]).includes(d)||isOnVacationDay(empR,d);
+  };
   const weekPool=openDays.filter(k=>k!=='sun');
   const sundayOpen=openDays.includes('sun');
   let rest=null;
@@ -914,7 +922,21 @@ function enforceSingleRest(days,empId,keep){
   } else {
     // lavora la domenica (o domenica chiusa): un solo riposo tra i giorni feriali aperti
     const pool=weekPool.length?weekPool:openDays;
-    rest=pool.find(k=>hasRest(k)&&!hasShift(k))||pool.find(k=>!hasShift(k))||null;
+    rest=pool.find(k=>hasRest(k)&&!hasShift(k)&&!assente(k))
+       ||pool.find(k=>!hasShift(k)&&!assente(k))
+       ||pool.find(k=>hasRest(k)&&!hasShift(k))
+       ||pool.find(k=>!hasShift(k))||null;
+    // Nessun giorno libero: il riposo settimanale è comunque obbligatorio → si libera
+    // la giornata meno carica togliendo i turni del dipendente.
+    if(!rest){
+      const dayH=k=>days[k].shifts.filter(x=>x.employeeId===empId).reduce((a2,x)=>a2+(x.hours||0),0);
+      const libera=pool.filter(k=>!assente(k)).sort((a2,b2)=>dayH(a2)-dayH(b2))[0]
+                 ||pool.slice().sort((a2,b2)=>dayH(a2)-dayH(b2))[0];
+      if(libera){
+        days[libera].shifts=days[libera].shifts.filter(x=>x.employeeId!==empId);
+        rest=libera;
+      }
+    }
   }
   openDays.forEach(k=>{
     if(k===rest)return;
@@ -1446,7 +1468,8 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     // Funziona anche quando non ci sono dipendenti flex disponibili (giorni scoperti).
     function coverDirectorGaps(){
       if(dayKey==='sun')return;
-      const directors=avail.filter(e=>e.isDirectore&&!isOnVacationDay(e,dayDate)&&!(e.daysOff||[]).includes(dayDate)&&!(e.permissionDays||[]).includes(dayDate));
+      const directors=avail.filter(e=>e.isDirectore&&!isOnVacationDay(e,dayDate)&&!(e.daysOff||[]).includes(dayDate)&&!(e.permissionDays||[]).includes(dayDate)
+        &&!sch.days[dayKey].dayOff.includes(e.id)); // mai turni nel giorno di riposo
       directors.forEach(dir=>{
         let dirCovMin=0;
         const MAX_DIR_MIN=180; // max 3h/giorno
@@ -2145,13 +2168,16 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     return false;
   };
 
-  flexEmps.forEach(emp=>{
+  // Include anche i direttori (tappabuchi): anche per loro una giornata intera senza
+  // turno equivarrebbe a un secondo riposo.
+  const presenzaEmps=[...flexEmps,...avail.filter(e=>e.isDirectore&&!flexEmps.includes(e))];
+  presenzaEmps.forEach(emp=>{
     openDays.filter(dk=>dayAvailable(emp,dk)&&!hasShiftOn(dk,emp.id)).forEach(dk=>{
       // 1) ore contrattuali disponibili → turno pieno
-      if(tryAddBlock(emp,dk,6)>0.01)return;
+      if(!emp.isDirectore&&tryAddBlock(emp,dk,6)>0.01)return;
 
       const maxH=empMaxH(emp);
-      let residualM=maxH>0?Math.round((maxH-(worked[emp.id]||0))*60):6*60;
+      let residualM=maxH>0?Math.round((maxH-(worked[emp.id]||0))*60):(emp.isDirectore?180:6*60);
 
       // 2) poche ore residue → presenza minima
       // 3) contratto saturo → recupera minuti dalle giornate più cariche
@@ -2178,7 +2204,7 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
   });
 
   // Avviso: giornate lavorative rimaste senza turno (equivalgono a un secondo riposo)
-  flexEmps.forEach(emp=>{
+  presenzaEmps.forEach(emp=>{
     const vuoti=openDays.filter(dk=>dayAvailable(emp,dk)&&!hasShiftOn(dk,emp.id));
     if(vuoti.length){
       warnings.push(`⚠️ ${emp.name} (${weekRange(weekStartISO)}): ${vuoti.map(d=>DAYS_FULL[DAYS_KEY.indexOf(d)]).join(', ')} senza alcun turno — equivale a un secondo riposo. Limite "persone in contemporanea" (${S.maxConcurrentTotal||'—'}) troppo basso per il personale disponibile.`);
@@ -2371,7 +2397,7 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
   });
 
   // ── CONTROLLO FINALE: un solo giorno di riposo a settimana ──
-  avail.forEach(e=>enforceSingleRest(sch.days,e.id));
+  avail.forEach(e=>enforceSingleRest(sch.days,e.id,null,weekStartISO));
 
   // Allega dati straordinari al risultato per visualizzazione
   return {weekStart:weekStartISO,days:sch.days,worked,overtimeH};
@@ -2753,23 +2779,6 @@ function clearSchedule(){
 
 /* ═══════════════ RENDER WEEKLY SCHEDULE ═══════════════ */
 function renderSchedule(){
-  // Riparazione orari salvati con versioni precedenti: garantisce un solo giorno di
-  // riposo settimanale per dipendente anche sugli orari già generati.
-  if(S.weekSchedules&&S.weekSchedules.length){
-    let fixed=false;
-    S.weekSchedules.forEach(wk=>{
-      if(!wk||!wk.days)return;
-      S.employees.forEach(emp=>{
-        if(isOnVacation(emp,wk.weekStart))return;
-        const openDays=DAYS_KEY.filter(k=>S.storeHours[k]&&S.storeHours[k].open&&wk.days[k]);
-        const rests=openDays.filter(k=>(wk.days[k].dayOff||[]).includes(emp.id));
-        const worksSun=openDays.includes('sun')&&(wk.days['sun'].shifts||[]).some(x=>x.employeeId===emp.id);
-        const wrongDay=rests.length===1&&openDays.includes('sun')&&((!worksSun&&rests[0]!=='sun')||(worksSun&&rests[0]==='sun'));
-        if(rests.length>1||wrongDay){enforceSingleRest(wk.days,emp.id);fixed=true}
-      });
-    });
-    if(fixed)save();
-  }
   const el=document.getElementById('schContent');
   const title=document.getElementById('schTitle');
   const mwBar=document.getElementById('mwBar');
@@ -2810,6 +2819,23 @@ function renderSchedule(){
     mwBar.style.display='none';emergBtn.style.display='none';if(checkBtn)checkBtn.style.display='none';return;
   }
 
+  // ── RIPARAZIONE RIPOSI SU QUALSIASI ORARIO VISUALIZZATO ──
+  // Vale anche per gli orari archiviati o importati e per quelli generati con versioni
+  // precedenti: nessun dipendente può avere due giorni di riposo nella stessa settimana.
+  let restFixed=0;
+  weekSchedules.forEach(wk=>{
+    if(!wk||!wk.days)return;
+    S.employees.forEach(emp=>{
+      if(isOnVacation(emp,wk.weekStart))return;
+      const od=DAYS_KEY.filter(k=>S.storeHours[k]&&S.storeHours[k].open&&wk.days[k]);
+      const rests=od.filter(k=>(wk.days[k].dayOff||[]).includes(emp.id));
+      const worksSun=od.includes('sun')&&(wk.days['sun'].shifts||[]).some(x=>x.employeeId===emp.id);
+      const wrongDay=rests.length===1&&od.includes('sun')&&((!worksSun&&rests[0]!=='sun')||(worksSun&&rests[0]==='sun'));
+      if(rests.length>1||wrongDay){enforceSingleRest(wk.days,emp.id,null,wk.weekStart);restFixed++}
+    });
+  });
+  if(restFixed)save();
+
   emergBtn.style.display=isReadOnly?'none':'';
   if(checkBtn)checkBtn.style.display='';
 
@@ -2833,7 +2859,35 @@ function renderSchedule(){
   if(!emps.length){el.innerHTML=`<div class="empty"><div class="empty-text">Nessun dipendente</div></div>`;return}
 
   const ws=new Date(sch.weekStart+'T00:00:00');
-  let html=`<div class="sch-grid"><table class="sch-table"><thead><tr><th class="emp-col">Dipendente</th>`;
+
+  // ── DIAGNOSI GIORNI NON LAVORATI ──
+  // Il riposo deve essere UNO. Se un dipendente ha più giornate senza turni (riposo +
+  // giornate vuote) viene segnalato qui sopra la tabella, con nome, giorni e motivo.
+  const diagn=[];
+  S.employees.forEach(emp=>{
+    if(isOnVacation(emp,sch.weekStart))return;
+    const odD=DAYS_KEY.filter(k=>S.storeHours[k]&&S.storeHours[k].open&&sch.days[k]);
+    const liberi=odD.filter((k,ki)=>{
+      const dDate=isoDate(addDays(ws,DAYS_KEY.indexOf(k)));
+      if((emp.daysOff||[]).includes(dDate))return false;      // assenza
+      if((emp.permissionDays||[]).includes(dDate))return false; // permesso
+      if(isOnVacationDay(emp,dDate))return false;             // ferie
+      return !sch.days[k].shifts.some(x=>x.employeeId===emp.id);
+    });
+    if(liberi.length>1){
+      const nomi=liberi.map(k=>DAYS_FULL[DAYS_KEY.indexOf(k)]).join(', ');
+      const causa=emp.hoursType==='fixed'
+        ? 'orario fisso: aggiungi i giorni mancanti nella scheda del dipendente'
+        : `capienza insufficiente: alza "max persone in contemporanea" (ora ${S.maxConcurrentTotal||'—'}) o riduci il personale in organico`;
+      diagn.push(`<strong>${esc(emp.name)}</strong>: ${liberi.length} giornate senza turno (${nomi}) — ${causa}`);
+    }
+  });
+
+  let html='';
+  if(diagn.length&&!isReadOnly){
+    html+=`<div class="alert alert-warning" style="margin-bottom:12px"><strong>⚠️ Giorni di riposo doppi (${diagn.length}):</strong> il riposo settimanale deve essere uno solo.<ul style="margin-top:6px;padding-left:18px;line-height:1.8">${diagn.map(d=>`<li>${d}</li>`).join('')}</ul></div>`;
+  }
+  html+=`<div class="sch-grid"><table class="sch-table"><thead><tr><th class="emp-col">Dipendente</th>`;
 
   DAYS_KEY.forEach((key,i)=>{
     const sh=S.storeHours[key];const closed=!sh||!sh.open;
@@ -3859,7 +3913,7 @@ function refreshEmpSchedule(empId){
     }
 
     // Un solo giorno di riposo a settimana (regola unica)
-    enforceSingleRest(sch.days,empId);
+    enforceSingleRest(sch.days,empId,null,weekStartISO);
   });
 
   save();renderSchedule();renderEmployees();
