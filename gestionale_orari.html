@@ -2002,6 +2002,95 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     });
   }
 
+  // ── PASSO 3-ter: NIENTE GIORNATE VUOTE ──
+  // Un dipendente deve lavorare in TUTTI i giorni di apertura tranne il suo unico giorno
+  // di riposo: una giornata senza turni equivale, nella tabella, a un secondo riposo.
+  // Per ogni giornata vuota si tenta prima di aggiungere ore (se il contratto lo consente),
+  // poi di SPOSTARE un turno da una giornata più carica dello stesso dipendente: le ore
+  // totali non cambiano, ma i giorni lavorati aumentano.
+  const empDayH=(dk,id)=>sch.days[dk].shifts.filter(s=>s.employeeId===id).reduce((a,x)=>a+(x.hours||0),0);
+  const hasShiftOn=(dk,id)=>sch.days[dk].shifts.some(s=>s.employeeId===id);
+  // concorrenza massima nell'intervallo [sM,eM) del giorno dk
+  const maxConcIn=(dk,sM,eM)=>{
+    const pts=[sM,...sch.days[dk].shifts.map(x=>t2m(x.startTime)).filter(x=>x>sM&&x<eM)];
+    return pts.reduce((mx,p)=>Math.max(mx,sch.days[dk].shifts.filter(x=>t2m(x.startTime)<=p&&t2m(x.endTime)>p).length),0);
+  };
+  const dayAvailable=(emp,dk)=>{
+    if(dk==='sun')return false;                       // domenica ha regole proprie
+    if(sch.days[dk].dayOff.includes(emp.id))return false;
+    const dIdx=DAYS_KEY.indexOf(dk);
+    const dDate=isoDate(addDays(weekStart,dIdx));
+    if((emp.daysOff||[]).includes(dDate))return false;
+    if((emp.permissionDays||[]).includes(dDate))return false;
+    if(isOnVacationDay(emp,dDate))return false;
+    return true;
+  };
+
+  flexEmps.forEach(emp=>{
+    openDays.filter(dk=>dayAvailable(emp,dk)&&!hasShiftOn(dk,emp.id)).forEach(dk=>{
+      // 1) ore contrattuali ancora disponibili → nuovo turno
+      if(tryAddBlock(emp,dk,6)>0.01)return;
+
+      // 2) sposta un turno da una giornata con almeno due turni del dipendente
+      const shD=S.storeHours[dk];
+      if(!shD||!shD.open)return;
+      const periodsD=shD.type==='split'
+        ? [['morning',t2m(shD.ms),t2m(shD.me)],['afternoon',t2m(shD.as),t2m(shD.ae)]]
+        : [['morning',t2m(shD.ms),t2m(shD.ae)]];
+      const statsD=computeSlotStats(DAYS_KEY.indexOf(dk));
+      const donors=openDays.filter(d=>d!==dk&&d!=='sun'
+        &&sch.days[d].shifts.filter(s=>s.employeeId===emp.id).length>=2)
+        .sort((a,b)=>empDayH(b,emp.id)-empDayH(a,emp.id));
+
+      for(const don of donors){
+        const mine=sch.days[don].shifts.filter(s=>s.employeeId===emp.id)
+          .sort((a,b)=>(a.hours||0)-(b.hours||0));
+        for(const moved of mine){
+          // non lasciare scoperta un'area non-magazzino nel giorno donatore
+          const area=getArea(moved.areaId);
+          if(area&&!isMagArea(area)){
+            const others=sch.days[don].shifts.some(x=>x!==moved&&x.areaId===moved.areaId
+              &&t2m(x.startTime)<t2m(moved.endTime)&&t2m(x.endTime)>t2m(moved.startTime));
+            if(!others)continue;
+          }
+          const durM=Math.round((moved.hours||0)*60);
+          if(durM<MIN_SHIFT_M)continue;
+          const slots=[...periodsD].sort((a,b)=>
+            slotScore(statsD,emp,a[0],DAYS_KEY.indexOf(dk))-slotScore(statsD,emp,b[0],DAYS_KEY.indexOf(dk)));
+          let placed=null;
+          for(const [,pS,pE] of slots){
+            const len=Math.min(durM,pE-pS,6*60);
+            if(len<MIN_SHIFT_M)continue;
+            if(S.maxConcurrentTotal&&maxConcIn(dk,pS,pS+len)>=S.maxConcurrentTotal)continue;
+            const aMax=area&&area.maxConcurrent?area.maxConcurrent:999;
+            const aCnt=sch.days[dk].shifts.filter(x=>x.areaId===moved.areaId
+              &&t2m(x.startTime)<pS+len&&t2m(x.endTime)>pS).length;
+            if(aCnt>=aMax)continue;
+            placed={s:pS,e:pS+len};
+            break;
+          }
+          if(!placed)continue;
+          // esegui lo spostamento
+          sch.days[don].shifts=sch.days[don].shifts.filter(x=>x!==moved);
+          worked[emp.id]=(worked[emp.id]||0)-(moved.hours||0);
+          const nh=shiftH(m2t(placed.s),m2t(placed.e));
+          sch.days[dk].shifts.push({employeeId:emp.id,startTime:m2t(placed.s),endTime:m2t(placed.e),
+            areaId:moved.areaId,hours:nh,overtime:moved.overtime});
+          worked[emp.id]=(worked[emp.id]||0)+nh;
+          return;
+        }
+      }
+    });
+  });
+
+  // Avviso: giornate lavorative senza turni (oltre al riposo) non risolvibili
+  flexEmps.forEach(emp=>{
+    const vuoti=openDays.filter(dk=>dayAvailable(emp,dk)&&!hasShiftOn(dk,emp.id));
+    if(vuoti.length){
+      warnings.push(`📅 ${emp.name} (${weekRange(weekStartISO)}): ${vuoti.length} giornata/e senza turno oltre al riposo (${vuoti.map(d=>DAYS_FULL[DAYS_KEY.indexOf(d)]).join(', ')}) — ore contrattuali o limite di persone in contemporanea insufficienti.`);
+    }
+  });
+
   // ── PASSO 4: DIRETTORE SOSTITUISCE GLI STRAORDINARI ECCESSIVI ──
   // Se un dipendente flex ha più di 3h di straordinario, il direttore subentra
   // in quei turni extra: riduce il turno del flex e si aggiunge lui per coprire.
@@ -2634,7 +2723,9 @@ function renderSchedule(){
       if(isOff&&!shifts.length){html+=`<td data-day="${key}"><div class="day-cell is-dayoff" ${clickFn} style="${cursor}"><span class="cell-lbl" style="color:#856404">Riposo</span></div></td>`;return}
 
       if(!shifts.length){
-        html+=`<td data-day="${key}"><div class="day-cell" ${clickFn} style="${cursor}">${isReadOnly?'':' <div class="add-shift">+ Aggiungi</div>'}</div></td>`;
+        // Giornata lavorativa senza turno: NON è un riposo (il riposo è uno solo a settimana).
+        // Va etichettata in modo esplicito per non confonderla con il giorno di riposo.
+        html+=`<td data-day="${key}"><div class="day-cell" ${clickFn} style="${cursor}"><span class="cell-lbl" style="color:#ADB5BD;font-size:10px">Nessun turno</span>${isReadOnly?'':' <div class="add-shift">+ Aggiungi</div>'}</div></td>`;
         return;
       }
 
@@ -2656,6 +2747,7 @@ function renderSchedule(){
   html+=`<div class="legend"><span class="text-xs fw-700 text-muted">AREE:</span>
     ${S.areas.map(a=>`<span class="legend-item"><span style="width:12px;height:12px;background:${a.color};border-radius:2px;display:inline-block"></span>${esc(a.name)}</span>`).join('')}
     <span class="legend-item"><span style="width:12px;height:12px;background:#FFFBF0;border:1px solid #FFEEBA;border-radius:2px;display:inline-block"></span>Riposo</span>
+    <span class="legend-item"><span style="width:12px;height:12px;background:#FFF;border:1px solid #DEE2E6;border-radius:2px;display:inline-block"></span>Nessun turno (non è riposo)</span>
     <span class="legend-item"><span style="width:12px;height:12px;background:#FEF0F0;border:1px solid #F5C6CB;border-radius:2px;display:inline-block"></span>Assenza</span>
     <span class="legend-item"><span style="width:12px;height:12px;background:#FFF5F5;border:1px solid #FADBD8;border-radius:2px;display:inline-block"></span>Ferie</span>
   </div>`;
