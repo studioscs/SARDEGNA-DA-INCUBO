@@ -889,6 +889,40 @@ function setWeekFromPicker(v){
   save();updateWeekDisplay();
 }
 
+/* ═══════════════ RIPOSO SETTIMANALE — REGOLA UNICA ═══════════════ */
+// Un dipendente fa UN SOLO giorno di riposo a settimana:
+//  • se NON è in turno la domenica (e il negozio è aperto) → il riposo è la domenica;
+//  • se lavora la domenica → il riposo è un giorno lun–sab.
+// Mai due giorni di riposo. Questa funzione è la fonte di verità: viene applicata alla
+// generazione, alla rigenerazione del singolo dipendente, alle modifiche manuali e agli
+// orari già salvati. `keep` indica un giorno scelto a mano da preferire.
+// Ritorna il giorno di riposo assegnato (o null se non è stato possibile assegnarlo).
+function enforceSingleRest(days,empId,keep){
+  if(!days)return null;
+  const openDays=DAYS_KEY.filter(k=>S.storeHours[k]&&S.storeHours[k].open&&days[k]);
+  if(!openDays.length)return null;
+  const hasRest =k=>days[k]&&(days[k].dayOff||[]).includes(empId);
+  const hasShift=k=>days[k]&&(days[k].shifts||[]).some(s=>s.employeeId===empId);
+  const weekPool=openDays.filter(k=>k!=='sun');
+  const sundayOpen=openDays.includes('sun');
+  let rest=null;
+  if(keep&&openDays.includes(keep)&&!hasShift(keep)){
+    rest=keep;                                   // riposo scelto manualmente
+  } else if(sundayOpen&&!hasShift('sun')){
+    rest='sun';                                  // non lavora la domenica → riposa la domenica
+  } else {
+    // lavora la domenica (o domenica chiusa): un solo riposo tra i giorni feriali aperti
+    const pool=weekPool.length?weekPool:openDays;
+    rest=pool.find(k=>hasRest(k)&&!hasShift(k))||pool.find(k=>!hasShift(k))||null;
+  }
+  openDays.forEach(k=>{
+    if(k===rest)return;
+    days[k].dayOff=(days[k].dayOff||[]).filter(id=>id!==empId);
+  });
+  if(rest&&!days[rest].dayOff.includes(empId))days[rest].dayOff.push(empId);
+  return rest;
+}
+
 /* ═══════════════ SCHEDULE GENERATION CORE ═══════════════ */
 // restHistory: {empId: dayKey} — last rest day each employee had (for rotation)
 // weekIndex: 0-based index of this week in the generation batch (for biweekly A/B)
@@ -2097,6 +2131,9 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     if(missing>0.5) warnings.push(`${weekRange(weekStartISO)}: ${e.name} — ${missing}h mancanti (${Math.round(contractual*10)/10}h su ${maxH}h contratto)`);
   });
 
+  // ── CONTROLLO FINALE: un solo giorno di riposo a settimana ──
+  avail.forEach(e=>enforceSingleRest(sch.days,e.id));
+
   // Allega dati straordinari al risultato per visualizzazione
   return {weekStart:weekStartISO,days:sch.days,worked,overtimeH};
 }
@@ -2477,6 +2514,23 @@ function clearSchedule(){
 
 /* ═══════════════ RENDER WEEKLY SCHEDULE ═══════════════ */
 function renderSchedule(){
+  // Riparazione orari salvati con versioni precedenti: garantisce un solo giorno di
+  // riposo settimanale per dipendente anche sugli orari già generati.
+  if(S.weekSchedules&&S.weekSchedules.length){
+    let fixed=false;
+    S.weekSchedules.forEach(wk=>{
+      if(!wk||!wk.days)return;
+      S.employees.forEach(emp=>{
+        if(isOnVacation(emp,wk.weekStart))return;
+        const openDays=DAYS_KEY.filter(k=>S.storeHours[k]&&S.storeHours[k].open&&wk.days[k]);
+        const rests=openDays.filter(k=>(wk.days[k].dayOff||[]).includes(emp.id));
+        const worksSun=openDays.includes('sun')&&(wk.days['sun'].shifts||[]).some(x=>x.employeeId===emp.id);
+        const wrongDay=rests.length===1&&openDays.includes('sun')&&((!worksSun&&rests[0]!=='sun')||(worksSun&&rests[0]==='sun'));
+        if(rests.length>1||wrongDay){enforceSingleRest(wk.days,emp.id);fixed=true}
+      });
+    });
+    if(fixed)save();
+  }
   const el=document.getElementById('schContent');
   const title=document.getElementById('schTitle');
   const mwBar=document.getElementById('mwBar');
@@ -2720,7 +2774,18 @@ function saveShiftEdit(empId,dayKey,weekIdx,dayDate){
     if(!emp.vacationOverrides.includes(dayDate))emp.vacationOverrides.push(dayDate);
   }
 
-  if(type.value==='off'){dd.dayOff.push(empId)}
+  if(type.value==='off'){
+    dd.dayOff.push(empId);
+    // Un solo riposo a settimana: sposta il riposo su questo giorno togliendo l'altro
+    enforceSingleRest(sch.days,empId,dayKey);
+    // Avviso se la scelta manuale contraddice la regola (riposo infrasettimanale a chi
+    // non è in turno la domenica): il riposo domenicale è stato rimosso.
+    const sunOpenM=S.storeHours['sun']&&S.storeHours['sun'].open;
+    const worksSunM=sch.days['sun']&&(sch.days['sun'].shifts||[]).some(x=>x.employeeId===empId);
+    if(dayKey!=='sun'&&sunOpenM&&!worksSunM){
+      toast('⚠️ Riposo spostato: il dipendente ora risulta senza turno la domenica');
+    }
+  }
   else{
     const s=document.getElementById('eStart').value,e=document.getElementById('eEnd').value,a=document.getElementById('eArea').value;
     if(s&&e&&t2m(e)>t2m(s))dd.shifts.push({employeeId:empId,startTime:s,endTime:e,areaId:a,hours:shiftH(s,e)});
@@ -2732,6 +2797,7 @@ function saveShiftEdit(empId,dayKey,weekIdx,dayDate){
       }
     }
   }
+  if(type.value!=='off')enforceSingleRest(sch.days,empId);
   save();closeModal();renderSchedule();renderEmployees();
 }
 
@@ -3549,6 +3615,9 @@ function refreshEmpSchedule(empId){
         workedH+=actualH;
       });
     }
+
+    // Un solo giorno di riposo a settimana (regola unica)
+    enforceSingleRest(sch.days,empId);
   });
 
   save();renderSchedule();renderEmployees();
