@@ -1,0 +1,3568 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestionale Orari</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --primary:#1B4F72;--accent:#2980B9;--accent-light:#D6EAF8;
+  --surface:#F4F6F8;--surface-2:#FFFFFF;--border:#DEE2E6;
+  --text:#212529;--muted:#6C757D;--danger:#DC3545;--success:#28A745;
+  --warning:#FFC107;--warn-bg:#FFF3CD;--warn-text:#856404;
+  --font:"Helvetica Neue",Helvetica,Arial,sans-serif;
+  --shadow:0 1px 3px rgba(0,0,0,0.08);--r:6px
+}
+body{font-family:var(--font);font-size:14px;color:var(--text);background:var(--surface);line-height:1.5;min-height:100vh}
+.app-header{background:var(--primary);color:#fff;padding:0 24px;display:flex;align-items:center;height:54px;gap:14px;box-shadow:0 2px 6px rgba(0,0,0,0.18)}
+.app-title{font-size:16px;font-weight:700;letter-spacing:.02em}
+.app-sub{font-size:12px;opacity:.65;margin-left:auto}
+.nav{display:flex;background:var(--surface-2);border-bottom:2px solid var(--border);padding:0 24px;overflow-x:auto;gap:0}
+.nav-tab{padding:12px 18px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;margin-bottom:-2px;white-space:nowrap;transition:color 120ms,border-color 120ms;user-select:none}
+.nav-tab:hover{color:var(--accent)}
+.nav-tab.active{color:var(--primary);border-bottom-color:var(--primary)}
+.content{padding:24px;max-width:1440px;margin:0 auto}
+.section{display:none}.section.active{display:block}
+.card{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--r);box-shadow:var(--shadow);margin-bottom:20px}
+.card-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.card-title{font-size:14px;font-weight:700;color:var(--primary);flex:1;min-width:120px}
+.card-body{padding:20px}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:4px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;border:1px solid transparent;transition:background 120ms;white-space:nowrap;line-height:1}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}.btn-primary:hover:not(:disabled){background:#1A6FA8}
+.btn-secondary{background:var(--surface);color:var(--text);border-color:var(--border)}.btn-secondary:hover:not(:disabled){background:#E9ECEF}
+.btn-danger{background:var(--danger);color:#fff}.btn-danger:hover:not(:disabled){background:#BD2130}
+.btn-success{background:var(--success);color:#fff}.btn-success:hover:not(:disabled){background:#218838}
+.btn-warning{background:#E67E22;color:#fff}.btn-warning:hover:not(:disabled){background:#CA6F1E}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn-icon{padding:4px 8px;font-size:14px}
+.btn-group{display:flex;gap:8px;flex-wrap:wrap}
+.table-wrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:13px}
+thead th{background:var(--primary);color:#fff;padding:9px 12px;text-align:left;font-weight:500;font-size:12px;letter-spacing:.02em}
+tbody td{padding:9px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover td{background:#F0F4F8}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.form-grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.form-group{display:flex;flex-direction:column;gap:4px}
+.form-group.full{grid-column:1/-1}
+.form-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.form-control{width:100%;border:1px solid var(--border);border-radius:4px;padding:7px 10px;font-family:inherit;font-size:13px;color:var(--text);background:#fff;transition:border-color 100ms,box-shadow 100ms}
+.form-control:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px rgba(41,128,185,.12)}
+.form-control:disabled{background:var(--surface);color:var(--muted)}
+select.form-control{cursor:pointer}
+textarea.form-control{resize:vertical;min-height:64px}
+.check-group{display:flex;flex-wrap:wrap;gap:12px}
+.check-item{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;user-select:none}
+.check-item input{cursor:pointer;width:15px;height:15px;flex-shrink:0}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;gap:4px}
+.b-blue{background:#D1ECF1;color:#0C5460}.b-green{background:#D4EDDA;color:#155724}
+.b-red{background:#F8D7DA;color:#721C24}.b-yellow{background:#FFF3CD;color:#856404}
+.b-purple{background:#E8DAEF;color:#6C3483}.b-gray{background:#E9ECEF;color:#495057}
+.b-orange{background:#FDEBD0;color:#784212}.b-pink{background:#FDEDEC;color:#943126}
+.color-dot{width:14px;height:14px;border-radius:3px;display:inline-block;border:1px solid rgba(0,0,0,.12);flex-shrink:0}
+.color-options{display:flex;gap:7px;flex-wrap:wrap}
+.color-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:transform 120ms,border-color 120ms}
+.color-swatch:hover{transform:scale(1.12)}
+.color-swatch.selected{border-color:#1B4F72}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px;backdrop-filter:blur(2px)}
+.modal{background:#fff;border-radius:8px;width:100%;max-width:620px;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.22)}
+.modal-lg{max-width:860px}
+.modal-header{padding:18px 22px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;position:sticky;top:0;background:#fff;z-index:1}
+.modal-title{font-size:14px;font-weight:700;color:var(--primary);flex:1}
+.modal-close{background:none;border:none;cursor:pointer;font-size:22px;color:var(--muted);padding:0 4px;line-height:1}
+.modal-close:hover{color:var(--text)}
+.modal-body{padding:20px 22px}
+.modal-footer{padding:14px 22px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.confirm-body{padding:28px 24px;text-align:center}
+.confirm-icon{font-size:44px;margin-bottom:12px}
+.confirm-msg{font-size:16px;font-weight:700;margin-bottom:6px}
+.confirm-sub{font-size:13px;color:var(--muted)}
+.alert{padding:11px 15px;border-radius:var(--r);font-size:13px;margin-bottom:14px;border:1px solid transparent}
+.alert-warning{background:var(--warn-bg);border-color:#FFEEBA;color:var(--warn-text)}
+.alert-info{background:#D1ECF1;border-color:#BEE5EB;color:#0C5460}
+.alert-danger{background:#F8D7DA;border-color:#F5C6CB;color:#721C24}
+.alert-success{background:#D4EDDA;border-color:#C3E6CB;color:#155724}
+.hours-day-row{display:grid;grid-template-columns:110px 80px 1fr;gap:12px;align-items:start;padding:10px 0;border-bottom:1px solid var(--border)}
+.hours-day-row:last-child{border-bottom:none}
+.day-name{font-weight:700;font-size:13px;padding-top:7px}
+.hours-inputs{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px}
+.hours-sep{color:var(--muted);font-size:12px}
+.time-input{width:108px}
+/* ── WEEK SELECTOR ── */
+.week-sel{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.week-nav{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 12px;cursor:pointer;font-size:16px;transition:background 120ms}
+.week-nav:hover{background:#E9ECEF}
+.week-label{font-size:14px;font-weight:700;min-width:240px;text-align:center}
+/* ── MULTI-WEEK NAV BAR ── */
+.mw-bar{display:flex;align-items:center;gap:10px;padding:12px 20px;border-bottom:1px solid var(--border);background:#F8F9FA;flex-wrap:wrap}
+.mw-week-btn{background:#fff;border:1px solid var(--border);border-radius:4px;padding:4px 12px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);transition:all 120ms}
+.mw-week-btn:hover{border-color:var(--accent);color:var(--accent)}
+.mw-week-btn.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.mw-info{font-size:12px;color:var(--muted);margin-left:auto}
+/* ── SCHEDULE GRID ── */
+.sch-grid{overflow-x:auto}
+.sch-table{border-collapse:collapse;min-width:860px;width:100%}
+.sch-table th{background:var(--primary);color:#fff;padding:9px 8px;text-align:center;font-size:12px;font-weight:600;min-width:100px}
+.sch-table th.emp-col{text-align:left;min-width:150px}
+.sch-table td{padding:0;border:1px solid var(--border);vertical-align:top}
+.sch-table td.emp-cell{padding:8px 10px;background:#F8F9FA;min-width:150px;border-left:none}
+.day-cell{min-height:60px;padding:5px;cursor:pointer;transition:background 120ms;display:flex;flex-direction:column;gap:3px}
+.day-cell:hover{background:#EBF5FB}
+.day-cell.is-closed{background:#F0F0F0;cursor:default;justify-content:center;align-items:center}
+.day-cell.is-dayoff{background:#FFFBF0;justify-content:center;align-items:center}
+.day-cell.is-vacation{background:#FFF5F5;justify-content:center;align-items:center}
+.day-cell.is-absence{background:#FEF0F0;justify-content:center;align-items:center}
+.day-cell.is-perm{background:#EFF9F0;justify-content:center;align-items:center}
+.cell-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+.shift-chip{border-left:3px solid var(--accent);padding:3px 5px;border-radius:0 3px 3px 0;font-size:11px;line-height:1.4;background:#EBF5FB}
+.shift-time{font-weight:700}
+.shift-area{color:var(--muted);font-size:10px}
+.add-shift{font-size:10px;color:#ADB5BD;margin:auto;text-align:center;padding:8px 0}
+.emp-name{font-size:12px;font-weight:700}
+/* ── HOURS BAR ── */
+.hrs-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:3px}
+.hrs-fill{height:100%;background:var(--accent);border-radius:2px;transition:width 300ms}
+.hrs-fill.over{background:var(--danger)}.hrs-fill.near{background:var(--warning)}
+/* ── FIXED SCHED ROWS ── */
+.fs-row{background:#F8F9FA;border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:8px}
+.fs-row-top{display:grid;grid-template-columns:130px 1fr auto;gap:8px;align-items:center;margin-bottom:6px}
+.fs-times{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.fs-split-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;padding-top:6px;border-top:1px dashed var(--border)}
+.fs-label{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.05em;margin-bottom:3px}
+/* ── VACATION ROWS ── */
+.vac-row{display:grid;grid-template-columns:1fr 1fr 1fr 32px;gap:8px;align-items:center;margin-bottom:7px;padding:8px;background:#FFF5F5;border-radius:4px;border:1px solid #F5C6CB}
+/* ── EMERGENCY PANEL ── */
+.uncover-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center;padding:10px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;background:#FAFAFA}
+.uncover-area{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
+/* ── CHAR TAGS ── */
+.char-tags{display:flex;flex-wrap:wrap;gap:3px}
+/* ── VAC PILL ── */
+.vac-pill{display:inline-block;background:#F8D7DA;color:#721C24;font-size:10px;padding:1px 7px;border-radius:8px;font-weight:600;margin:1px}
+.day-pill{display:inline-block;background:#FFF3CD;color:#856404;font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600}
+.day-pill.perm{background:#D1ECF1;color:#0C5460}
+/* ── DIVIDER ── */
+.divider{height:1px;background:var(--border);margin:16px 0}
+/* ── UTILS ── */
+.flex{display:flex}.flex-col{flex-direction:column}.items-center{align-items:center}
+.justify-between{justify-content:space-between}.gap-8{gap:8px}.gap-12{gap:12px}.gap-16{gap:16px}
+.mb-8{margin-bottom:8px}.mb-12{margin-bottom:12px}.mb-16{margin-bottom:16px}.mb-20{margin-bottom:20px}
+.mt-4{margin-top:4px}.mt-8{margin-top:8px}.mt-12{margin-top:12px}.mt-16{margin-top:16px}
+.fw-700{font-weight:700}.text-muted{color:var(--muted)}.text-sm{font-size:12px}.text-xs{font-size:11px}
+.text-danger{color:var(--danger)}.flex-wrap{flex-wrap:wrap}
+.empty{text-align:center;padding:48px 24px;color:var(--muted)}
+.empty-icon{font-size:44px;margin-bottom:12px}
+.empty-text{font-size:15px;font-weight:600}.empty-sub{font-size:12px;margin-top:5px}
+.info-box{background:#EBF5FB;border:1px solid #AED6F1;border-radius:var(--r);padding:12px 15px;font-size:12px;color:#1A5276}
+.legend{display:flex;gap:14px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--border);background:#FAFBFC}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:12px}
+#toast{position:fixed;bottom:20px;right:20px;background:var(--primary);color:#fff;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.22);z-index:3000;opacity:0;transition:opacity 250ms;pointer-events:none}
+#toast.show{opacity:1}
+@media print{.nav,.app-header,.btn,.btn-group,.card-header .btn-group,.week-sel,.mw-bar{display:none!important}.card{box-shadow:none;border:none}body{background:#fff}}
+@media(max-width:768px){.form-grid,.form-grid-3{grid-template-columns:1fr}.content{padding:12px}.hours-day-row{grid-template-columns:90px 70px 1fr}}
+#loadingOverlay{position:fixed;inset:0;background:rgba(255,255,255,.92);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px}
+.spinner{width:40px;height:40px;border:4px solid #D6E4F0;border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+#syncStatus{font-size:11px;font-weight:600;padding:2px 8px;border-radius:10px;transition:opacity .3s}
+/* ── AUTH SCREEN ── */
+#authOverlay{position:fixed;inset:0;background:var(--primary);z-index:10000;display:flex;align-items:center;justify-content:center;padding:16px}
+.auth-box{background:#fff;border-radius:12px;padding:40px 36px;width:100%;max-width:360px;box-shadow:0 24px 64px rgba(0,0,0,.35);text-align:center}
+.auth-logo{font-size:44px;margin-bottom:10px}
+.auth-title{font-size:20px;font-weight:700;color:var(--primary);margin-bottom:4px}
+.auth-sub{font-size:13px;color:var(--muted);margin-bottom:24px}
+.auth-box input[type=password]{width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:6px;font-size:15px;font-family:var(--font);outline:none;margin-bottom:14px;transition:border-color 120ms}
+.auth-box input[type=password]:focus{border-color:var(--accent)}
+.auth-btn{width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);transition:background 120ms}
+.auth-btn:hover{background:#1A6FA8}
+.auth-err{color:var(--danger);font-size:12px;margin-top:8px;min-height:18px;font-weight:600}
+.auth-change{font-size:11px;color:var(--muted);margin-top:14px;cursor:pointer;text-decoration:underline}
+.auth-change:hover{color:var(--accent)}
+/* ── STRAORDINARI BADGE ── */
+.shift-chip.overtime{border-left-color:#E67E22;background:#FEF0E0}
+.badge-ot{background:#FDEBD0;color:#784212;font-size:10px;font-weight:700;padding:1px 5px;border-radius:8px;display:inline-block;margin-top:2px}
+/* ── CHECK ORARI: TAB + COPERTURA AREE ── */
+.co-tab-btn{background:#fff;border:1px solid var(--border);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;font-weight:700;color:var(--muted);transition:all 120ms}
+.co-tab-btn:hover{border-color:var(--accent);color:var(--accent)}
+.co-tab-btn.active{background:var(--primary);border-color:var(--primary);color:#fff}
+.cov-bar{display:flex;height:20px;border-radius:3px;overflow:hidden;border:1px solid var(--border);margin:3px 0}
+.cov-seg-ok{background:#27AE60}
+.cov-seg-gap{background:repeating-linear-gradient(45deg,#E74C3C,#E74C3C 5px,#C0392B 5px,#C0392B 10px);cursor:pointer}
+.cov-times{display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:1px}
+.gap-chip{display:inline-flex;align-items:center;gap:5px;background:#FDEDEC;border:1px solid #F5B7B1;color:#922B21;font-size:11px;font-weight:600;padding:3px 8px;border-radius:12px;margin:2px 4px 2px 0;cursor:pointer}
+.gap-chip:hover{background:#FADBD8}
+.day-highlight{outline:3px solid #E67E22 !important;outline-offset:-2px;animation:dayPulse 1.4s ease-in-out 0s 2}
+@keyframes dayPulse{0%,100%{background-color:transparent}50%{background-color:#FEF0E0}}
+</style>
+</head>
+<body>
+
+<!-- ── AUTH SCREEN ── -->
+<div id="authOverlay" style="display:none">
+  <div class="auth-box">
+    <div class="auth-logo">🏪</div>
+    <div class="auth-title">Gestionale Orari</div>
+    <div class="auth-sub" id="authSubTitle">Accesso riservato</div>
+    <input type="text" id="authUsernameInput" placeholder="Username" autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('authPwdInput').focus()" style="width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:6px;font-size:15px;font-family:var(--font);outline:none;margin-bottom:10px;transition:border-color 120ms" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'">
+    <input type="password" id="authPwdInput" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')authSubmit()">
+    <button class="auth-btn" onclick="authSubmit()" id="authBtnMain">Accedi</button>
+    <div class="auth-err" id="authErr"></div>
+  </div>
+</div>
+
+<div id="loadingOverlay" style="display:none">
+  <div class="spinner"></div>
+  <div style="font-size:13px;color:var(--muted);font-weight:600">Caricamento dati dal cloud...</div>
+</div>
+
+<div class="app-header">
+  <span style="font-size:22px">🏪</span>
+  <div class="app-title">Gestionale Orari</div>
+  <div class="app-sub" id="storeNameHdr">Acqua &amp; Sapone</div>
+  <div style="margin-left:auto;display:flex;align-items:center;gap:12px"><span id="syncStatus"></span><button onclick="authLogout()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:#fff;border-radius:4px;padding:4px 10px;font-size:12px;cursor:pointer;font-family:var(--font)" title="Esci">🔓 Esci</button></div>
+</div>
+
+<div class="nav" id="navTabs">
+  <div class="nav-tab active" data-tab="employees">👤 Dipendenti</div>
+  <div class="nav-tab" data-tab="areas">📋 Aree</div>
+  <div class="nav-tab" data-tab="storehours">🕐 Orari Negozio</div>
+  <div class="nav-tab" data-tab="generate">⚙️ Genera Orario</div>
+  <div class="nav-tab" data-tab="schedule">📅 Orario Settimanale</div>
+  <div class="nav-tab" data-tab="settings">🔧 Impostazioni</div>
+</div>
+
+<div class="content">
+
+<!-- ═══ DIPENDENTI ═══ -->
+<div class="section active" id="tab-employees">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Dipendenti</div>
+      <div class="btn-group">
+        <button class="btn btn-primary btn-sm" onclick="openEmpModal()">+ Aggiungi Dipendente</button>
+        <button class="btn btn-secondary btn-sm" onclick="cleanExpiredAbsences()" title="Rimuove giorni assenza/permesso già passati da tutti i dipendenti">🧹 Pulisci Assenze Scadute</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th>Nome</th><th>Contratto</th><th>Caratteristiche</th>
+          <th>Periodi Ferie</th><th>Assenze/Permessi</th>
+          <th style="width:90px">Azioni</th>
+        </tr></thead>
+        <tbody id="empTbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ AREE ═══ -->
+<div class="section" id="tab-areas">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Aree del Negozio</div>
+      <div class="btn-group">
+        <button class="btn btn-primary btn-sm" onclick="openAreaModal()">+ Aggiungi Area</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th style="width:50px">Colore</th><th>Nome Area</th>
+          <th>Min. dip.</th><th>Max contemp.</th><th>Note</th>
+          <th style="width:90px">Azioni</th>
+        </tr></thead>
+        <tbody id="areaTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:16px">
+    <div class="card-header"><div class="card-title">Vincoli di Presenza</div></div>
+    <div class="card-body">
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Max persone totali in negozio (per giorno)</label>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:6px">Limite globale: es. 3 significa che non vengono assegnati più di 3 dipendenti in un giorno. 0 = nessun limite.</div>
+          <input type="number" class="form-control" id="maxConcTotal" value="" min="0" max="20" style="width:100px" placeholder="Es. 3">
+        </div>
+      </div>
+      <button class="btn btn-primary btn-sm mt-8" onclick="saveVincoli()">💾 Salva Vincoli</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ORARI NEGOZIO ═══ -->
+<div class="section" id="tab-storehours">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Orari di Apertura Negozio</div>
+      <div class="btn-group">
+        <button class="btn btn-primary btn-sm" onclick="saveStoreHours()">💾 Salva Orari</button>
+      </div>
+    </div>
+    <div class="card-body" id="storeHoursBody"></div>
+  </div>
+</div>
+
+<!-- ═══ GENERA ORARIO ═══ -->
+<div class="section" id="tab-generate">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Generazione Orario Settimanale</div>
+    </div>
+    <div class="card-body">
+      <div class="flex items-center gap-16 mb-16 flex-wrap">
+        <div>
+          <div class="form-label mb-8" style="margin-bottom:6px">Prima settimana</div>
+          <div class="week-sel">
+            <button class="week-nav" onclick="prevWeek()">←</button>
+            <div class="week-label" id="weekLabel">—</div>
+            <button class="week-nav" onclick="nextWeek()">→</button>
+          </div>
+        </div>
+        <div>
+          <div class="form-label" style="margin-bottom:6px">Oppure scegli data</div>
+          <input type="week" class="form-control" id="weekPicker" onchange="setWeekFromPicker(this.value)" style="width:180px">
+        </div>
+        <div>
+          <div class="form-label" style="margin-bottom:6px">Numero settimane</div>
+          <div class="flex items-center gap-8">
+            <input type="number" class="form-control" id="numWeeks" value="1" min="1" max="9" style="width:70px" onchange="S.genWeekCount=parseInt(this.value)||1;save()">
+            <span class="text-sm text-muted">(max 9 = ~2 mesi)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group mb-16" style="background:#F8F9FA;border:1px solid var(--border);border-radius:6px;padding:14px">
+        <label class="form-label">🚚 Giorni con arrivo camion (il dipendente camion inizia alle 07:00 e lavora almeno fino all'apertura)</label>
+        <div class="check-group mt-8" id="camionDaysGroup"></div>
+        <button class="btn btn-secondary btn-sm mt-8" onclick="saveCamionDays()">💾 Salva</button>
+      </div>
+
+      <div class="info-box mb-16">
+        <strong>Regole applicate automaticamente:</strong>
+        <ul style="margin-top:6px;padding-left:18px;line-height:1.9;font-size:12px">
+          <li><strong>Priorità 1 — Profumeria su TUTTI i giorni</strong>: prima si mettono a copertura di ogni giornata di apertura le esperte di profumeria, poi si completa la copertura con gli altri dipendenti</li>
+          <li><strong>Priorità 2 — Copertura settimana completa</strong> (inclusa domenica) per tutti i giorni di apertura</li>
+          <li><strong>Turni variati</strong>: nessuno fa tutte mattine o tutti pomeriggi — mattina e pomeriggio si alternano tra i dipendenti giorno per giorno</li>
+          <li><strong>Priorità 3 — Contemporaneità per area</strong>: Magazzino-Vendita è sacrificabile in caso di carenza personale</li>
+          <li><strong>Domenica: esattamente 3 persone</strong>, turno completo (apertura→chiusura), a rotazione settimanale — non sempre le stesse 3</li>
+          <li>Chi inizia alle 07:00 (camion) deve fare <strong>almeno fino alle 11:00</strong> (min. 4h)</li>
+          <li>Turno minimo: <strong>2 ore</strong> — nessun turno inferiore viene assegnato</li>
+          <li>Turno spezzato: max 6h consecutive, poi pausa obbligatoria ≥ 2h</li>
+          <li>1 giorno di riposo settimanale per dipendente, a rotazione</li>
+          <li>Rispetto ore contrattuali settimanali</li>
+          <li>Se le ore contrattuali non bastano a coprire la settimana → <strong>straordinari distribuiti equamente</strong> e segnalati in arancione</li>
+          <li>Specializzato profumeria → assegnato prioritariamente in Profumeria</li>
+          <li>Periodi ferie rispettati automaticamente</li>
+        </ul>
+      </div>
+
+      <div id="genWarnings"></div>
+
+      <div class="btn-group">
+        <button class="btn btn-success" onclick="generateSchedule()" style="padding:10px 22px;font-size:14px">
+          ⚡ Genera Orario Automatico
+        </button>
+        <button class="btn btn-secondary" onclick="clearSchedule()">🗑 Cancella Orario</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" id="genPreview" style="display:none">
+    <div class="card-header"><div class="card-title">Riepilogo Ore — Settimana <span id="genPreviewWeekNum">1</span></div>
+      <div class="btn-group" id="genPreviewWeekNav"></div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Dipendente</th><th>Ore Contratto</th><th>Ore Assegnate</th><th>Straordinari</th><th>Stato</th><th>Giorno Riposo</th></tr></thead>
+        <tbody id="genPreviewBody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ ORARIO SETTIMANALE ═══ -->
+<div class="section" id="tab-schedule">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title" id="schTitle">Orario Settimanale</div>
+      <div class="btn-group">
+        <button class="btn btn-secondary btn-sm" onclick="openCheckOrari()" id="checkOrariBtn" style="display:none">📊 Check Orari</button>
+        <button class="btn btn-warning btn-sm" onclick="openEmergencyModal()" id="emergencyBtn" style="display:none">🚨 Assenza Urgente</button>
+        <button class="btn btn-secondary btn-sm" onclick="window.print()">🖨 Stampa</button>
+        <button class="btn btn-primary btn-sm" onclick="switchTab('generate')">⚙️ Genera</button>
+      </div>
+    </div>
+    <!-- Archive selector bar -->
+    <div class="mw-bar" id="archiveBar" style="display:none;border-bottom:2px solid #FDEBD0">
+      <span class="text-xs fw-700" style="color:#784212">📦 ARCHIVIO:</span>
+      <select class="form-control" id="archiveSelect" onchange="switchScheduleSource(this.value)" style="width:auto;max-width:320px;font-size:12px;padding:4px 8px"></select>
+      <button class="btn btn-danger btn-sm" id="deleteArchiveBtn" onclick="deleteCurrentArchive()" style="display:none">🗑 Elimina Archivio</button>
+      <span class="text-xs text-muted" id="archiveReadonly" style="display:none">📖 Sola lettura</span>
+    </div>
+    <!-- Multi-week tabs bar -->
+    <div class="mw-bar" id="mwBar" style="display:none"></div>
+    <div id="schContent">
+      <div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Nessun orario generato</div><div class="empty-sub">Vai in "Genera Orario" per creare l'orario settimanale</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ IMPOSTAZIONI ═══ -->
+<div class="section" id="tab-settings">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title">Impostazioni Generali</div>
+      <button class="btn btn-primary btn-sm" onclick="saveSettings()">💾 Salva</button>
+    </div>
+    <div class="card-body">
+      <div class="form-grid mb-16">
+        <div class="form-group">
+          <label class="form-label">Nome Negozio</label>
+          <input type="text" class="form-control" id="setStoreName" placeholder="Acqua &amp; Sapone">
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="btn-group">
+        <button class="btn btn-secondary btn-sm" onclick="authShowChangeInline()">🔑 Cambia Password</button>
+        <button class="btn btn-danger btn-sm" onclick="resetAll()">⚠️ Reset Tutti i Dati</button>
+        <button class="btn btn-secondary btn-sm" onclick="exportData()">⬇ Esporta JSON</button>
+        <button class="btn btn-secondary btn-sm" onclick="document.getElementById('importFile').click()">⬆ Importa JSON</button>
+        <input type="file" id="importFile" accept=".json" style="display:none" onchange="importData(event)">
+      </div>
+    </div>
+  </div>
+</div>
+
+</div><!-- /content -->
+
+<div class="overlay" id="modalOverlay" style="display:none" onclick="handleOvClick(event)">
+  <div class="modal" id="modalBox"></div>
+</div>
+<div class="overlay" id="confirmOverlay" style="display:none">
+  <div class="modal" id="confirmBox" style="max-width:380px"></div>
+</div>
+<div id="toast"></div>
+
+<script>
+/* ═══════════════ CONSTANTS ═══════════════ */
+const DAYS_KEY  = ['mon','tue','wed','thu','fri','sat','sun'];
+const DAYS_FULL = ['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
+const DAYS_SHORT= ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+const PALETTE   = ['#E74C3C','#E67E22','#F39C12','#2ECC71','#1ABC9C','#3498DB','#9B59B6','#E91E63','#FF5722','#607D8B','#27AE60','#2980B9','#8E44AD','#D35400'];
+const MIN_SHIFT_M = 240; // durata minima turno: 4 ore (in minuti)
+
+/* ═══════════════ DEFAULT STATE ═══════════════ */
+function defaultState(){
+  return {
+    storeName:'Acqua & Sapone',
+    areas:[
+      {id:uid(),name:'Magazzino-Vendita',color:'#27AE60',minCoverage:1,notes:'Magazzino e area vendita prodotti'},
+      {id:uid(),name:'Profumeria',       color:'#8E44AD',minCoverage:1,notes:'Area profumeria e cosmesi'},
+      {id:uid(),name:'Cassa',            color:'#E74C3C',minCoverage:1,notes:'Cassa e checkout clienti'},
+    ],
+    employees:[],
+    storeHours:{
+      mon:{open:true, type:'split',ms:'09:00',me:'13:00',as:'15:30',ae:'19:30'},
+      tue:{open:true, type:'split',ms:'09:00',me:'13:00',as:'15:30',ae:'19:30'},
+      wed:{open:true, type:'split',ms:'09:00',me:'13:00',as:'15:30',ae:'19:30'},
+      thu:{open:true, type:'split',ms:'09:00',me:'13:00',as:'15:30',ae:'19:30'},
+      fri:{open:true, type:'split',ms:'09:00',me:'13:00',as:'15:30',ae:'19:30'},
+      sat:{open:true, type:'split',ms:'09:00',me:'13:00',as:'15:30',ae:'19:30'},
+      sun:{open:false,type:'split',ms:'09:00',me:'13:00',as:'15:30',ae:'19:30'},
+    },
+    maxConcurrentTotal:3,
+    camionDays:{mon:false,tue:false,wed:false,thu:false,fri:false,sat:false,sun:false},
+    weekSchedules:[],     // array of {weekStart, days}
+    genWeekCount:1,
+    currentViewWeekIdx:0,
+    currentWeekStart:null,
+    archivedSchedules:[],  // [{id, name, createdAt, weekSchedules}]
+    currentViewSource:'current' // 'current' | archive id
+  };
+}
+
+let S = defaultState();
+
+/* ═══════════════ SUPABASE ═══════════════ */
+const SB_URL='https://mmsjuoctkvyibleithvp.supabase.co';
+const SB_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1tc2p1b2N0a3Z5aWJsZWl0aHZwIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIzOTk1ODIsImV4cCI6MjA5Nzk3NTU4Mn0.5EzcLLeBTk8Dm7B3iHFrxsQWCxEeam-4aFKBlV3BHH4';
+// Token segreto — deve coincidere con il valore in app_config su Supabase.
+// Anche se visibile nel sorgente HTML, senza questo token le RLS bloccano
+// l'accesso a app_state. Chi non conosce username+password non arriva mai qui.
+const APP_TOKEN='edd32d36efff0fde8ddd9116a06f0a14';
+// SB_HDR base (solo per login — non include ancora APP_TOKEN)
+const SB_HDR_BASE={'Content-Type':'application/json','apikey':SB_KEY,'Authorization':'Bearer '+SB_KEY};
+// SB_HDR completo (con token) — usato per app_state dopo login riuscito
+let SB_HDR={...SB_HDR_BASE,'x-app-token':APP_TOKEN};
+
+/* ═══════════════ AUTH (Supabase-based) ═══════════════ */
+// Flusso:
+//  1. Login → SHA-256(password) → SELECT da app_users dove pwd_hash = $hash
+//  2. Se trovato → salva username in sessionStorage, sblocca UI
+//  3. Tutti i salvataggi su app_state passano header x-app-token (segreto lato Supabase via RLS)
+// La password non è mai in chiaro nel browser né in localStorage.
+
+const AUTH_SESSION = 'gest_auth_user'; // sessionStorage key
+
+async function sha256(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
+async function authInit() {
+  const saved = sessionStorage.getItem(AUTH_SESSION);
+  if (saved) { hideAuthOverlay(); return; }
+  showAuthOverlay();
+}
+
+function showAuthOverlay(msg) {
+  const ov = document.getElementById('authOverlay');
+  ov.style.display = 'flex';
+  if (msg) document.getElementById('authErr').textContent = msg;
+  else document.getElementById('authErr').textContent = '';
+  document.getElementById('authPwdInput').value = '';
+  document.getElementById('authUsernameInput').value = '';
+  setTimeout(() => document.getElementById('authUsernameInput').focus(), 80);
+}
+
+function hideAuthOverlay() {
+  document.getElementById('authOverlay').style.display = 'none';
+}
+
+async function authSubmit() {
+  const username = document.getElementById('authUsernameInput').value.trim().toLowerCase();
+  const password = document.getElementById('authPwdInput').value;
+  const errEl = document.getElementById('authErr');
+  const btn = document.getElementById('authBtnMain');
+  errEl.textContent = '';
+  if (!username || !password) { errEl.textContent = 'Inserisci username e password'; return; }
+
+  btn.disabled = true;
+  btn.textContent = 'Verifica in corso...';
+  try {
+    const hash = await sha256(password);
+    const res = await fetch(
+      SB_URL + '/rest/v1/app_users?username=eq.' + encodeURIComponent(username) + '&pwd_hash=eq.' + hash + '&select=username',
+      { headers: SB_HDR_BASE }
+    );
+    if (!res.ok) throw new Error('network');
+    const rows = await res.json();
+    if (rows.length > 0) {
+      sessionStorage.setItem(AUTH_SESSION, username);
+      hideAuthOverlay();
+    } else {
+      errEl.textContent = 'Credenziali non valide';
+    }
+  } catch(e) {
+    errEl.textContent = 'Errore di connessione — riprova';
+  }
+  btn.disabled = false;
+  btn.textContent = 'Accedi';
+}
+
+function authLogout() {
+  sessionStorage.removeItem(AUTH_SESSION);
+  location.reload();
+}
+
+function authShowChangeInline() {
+  const currentUser = sessionStorage.getItem(AUTH_SESSION);
+  if (!currentUser) { toast('Devi essere loggato'); return; }
+  openModal(`
+    <div class="modal-header"><div class="modal-title">🔑 Cambia Password</div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="alert alert-info" style="margin-bottom:14px">Le password sono salvate su Supabase come hash SHA-256. Utente: <strong>${esc(currentUser)}</strong></div>
+      <div class="form-group mb-12">
+        <label class="form-label">Password attuale</label>
+        <input type="password" class="form-control" id="cpOld" placeholder="Password corrente">
+      </div>
+      <div class="form-group mb-12">
+        <label class="form-label">Nuova password</label>
+        <input type="password" class="form-control" id="cpNew" placeholder="Min. 6 caratteri">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Conferma nuova password</label>
+        <input type="password" class="form-control" id="cpNew2" placeholder="Ripeti la nuova password">
+      </div>
+      <div class="auth-err" id="cpErr" style="margin-top:10px"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Annulla</button>
+      <button class="btn btn-primary" onclick="changePasswordModal()">Salva Nuova Password</button>
+    </div>`);
+}
+
+async function changePasswordModal() {
+  const currentUser = sessionStorage.getItem(AUTH_SESSION);
+  const old = document.getElementById('cpOld').value;
+  const nw  = document.getElementById('cpNew').value;
+  const nw2 = document.getElementById('cpNew2').value;
+  const err = document.getElementById('cpErr');
+  err.textContent = '';
+  if (!old) { err.textContent = 'Inserisci la password attuale'; return; }
+  if (nw.length < 6) { err.textContent = 'Nuova password troppo corta (min. 6 caratteri)'; return; }
+  if (nw !== nw2) { err.textContent = 'Le password non coincidono'; return; }
+  // Verify old password
+  const oldHash = await sha256(old);
+  const check = await fetch(
+    SB_URL + '/rest/v1/app_users?username=eq.' + encodeURIComponent(currentUser) + '&pwd_hash=eq.' + oldHash + '&select=username',
+    { headers: SB_HDR_BASE }
+  );
+  const rows = await check.json();
+  if (!rows.length) { err.textContent = 'Password attuale errata'; return; }
+  // Update password
+  const newHash = await sha256(nw);
+  const upd = await fetch(
+    SB_URL + '/rest/v1/app_users?username=eq.' + encodeURIComponent(currentUser),
+    { method:'PATCH', headers:{...SB_HDR,'Prefer':'return=minimal'}, body: JSON.stringify({pwd_hash: newHash}) }
+  );
+  if (upd.ok) { closeModal(); toast('Password aggiornata ✓'); }
+  else { err.textContent = 'Errore aggiornamento — riprova'; }
+}
+
+function setSyncStatus(s){
+  const el=document.getElementById('syncStatus');if(!el)return;
+  if(s==='saving'){el.textContent='⏳ Salvataggio...';el.style.color='var(--muted)'}
+  else if(s==='saved'){el.textContent='☁️ Salvato';el.style.color='#1E8449';setTimeout(()=>{el.textContent=''},2500)}
+  else if(s==='error'){el.textContent='⚠️ Errore cloud';el.style.color='#C0392B'}
+  else if(s==='offline'){el.textContent='📴 Offline (locale)';el.style.color='#E67E22'}
+}
+
+let _saveTimer=null;
+async function sbSave(){
+  try{
+    setSyncStatus('saving');
+    const res=await fetch(SB_URL+'/rest/v1/app_state',{
+      method:'POST',
+      headers:{...SB_HDR,'Prefer':'resolution=merge-duplicates'},
+      body:JSON.stringify({id:'main',data:S,updated_at:new Date().toISOString()})
+    });
+    if(res.ok)setSyncStatus('saved');else setSyncStatus('error');
+  }catch(e){setSyncStatus('offline')}
+}
+
+/* ═══════════════ UTILS ═══════════════ */
+function uid(){return 'id_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+function save(){
+  try{localStorage.setItem('gest_orari_v4',JSON.stringify(S))}catch(e){}
+  clearTimeout(_saveTimer);
+  _saveTimer=setTimeout(sbSave,400); // debounce 400ms
+}
+function applyParsedState(p){
+  S=Object.assign(defaultState(),p);
+  if(p.weekSchedule&&!p.weekSchedules){S.weekSchedules=[p.weekSchedule];delete S.weekSchedule}
+  if(!S.weekSchedules)S.weekSchedules=[];
+  if(!S.archivedSchedules)S.archivedSchedules=[];
+  if(!S.currentViewSource)S.currentViewSource='current';
+  (S.employees||[]).forEach(e=>{if(!e.vacations)e.vacations=[];if(!e.vacationOverrides)e.vacationOverrides=[];if(!e.datePreferences)e.datePreferences=[]});
+  // Normalizza currentWeekStart al lunedì (settimana standard lun→dom)
+  if(S.currentWeekStart){
+    const norm=isoDate(getMonday(new Date(S.currentWeekStart+'T00:00:00')));
+    if(norm!==S.currentWeekStart)S.currentWeekStart=norm;
+  }
+  // Normalizza anche le settimane già generate
+  (S.weekSchedules||[]).forEach(sc=>{
+    if(sc.weekStart){const nm=isoDate(getMonday(new Date(sc.weekStart+'T00:00:00')));if(nm!==sc.weekStart)sc.weekStart=nm;}
+  });
+}
+function load(){
+  try{const r=localStorage.getItem('gest_orari_v4');if(r)applyParsedState(JSON.parse(r))}catch(e){}
+}
+async function loadFromSupabase(){
+  try{
+    const res=await fetch(SB_URL+'/rest/v1/app_state?id=eq.main',{headers:SB_HDR});
+    if(res.ok){
+      const rows=await res.json();
+      if(rows.length>0){
+        applyParsedState(rows[0].data);
+        try{localStorage.setItem('gest_orari_v4',JSON.stringify(S))}catch(e){}
+        return true;
+      }
+    }
+  }catch(e){}
+  return false;
+}
+function t2m(t){if(!t)return 0;const[h,m]=t.split(':').map(Number);return h*60+(m||0)}
+function m2t(m){return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')}
+function shiftH(s,e){return Math.max(0,(t2m(e)-t2m(s))/60)}
+function dayH(sh){if(!sh||!sh.open)return 0;if(sh.type==='continuous')return(t2m(sh.ae)-t2m(sh.ms))/60;return(t2m(sh.me)-t2m(sh.ms))/60+(t2m(sh.ae)-t2m(sh.as))/60}
+function getMonday(d){const dt=new Date(d);const day=dt.getDay();const diff=day===0?-6:1-day;dt.setDate(dt.getDate()+diff);dt.setHours(0,0,0,0);return dt}
+function addDays(d,n){const dt=new Date(d);dt.setDate(dt.getDate()+n);return dt}
+function isoDate(d){
+  // Usa componenti locali, non toISOString (che converte in UTC e può shiftare il giorno)
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+function fmtShort(d){return d.toLocaleDateString('it-IT',{day:'2-digit',month:'2-digit'})}
+function weekRange(wsISO){const ws=new Date(wsISO+'T00:00:00');const we=addDays(ws,6);return fmtShort(ws)+' – '+fmtShort(we)+' '+we.getFullYear()}
+function empMaxH(e){if(e.isDirectore)return 0;if(e.hoursType==='38')return 38;if(e.hoursType==='40')return 40;if(e.hoursType==='custom')return parseFloat(e.customHours)||38;return 0}
+function getArea(id){return S.areas.find(a=>a.id===id)}
+function getEmp(id){return S.employees.find(e=>e.id===id)}
+function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+
+// Controlla se il dipendente è in ferie in un GIORNO specifico
+// vacationOverrides[] contiene date in cui il giorno è stato sovrascritto manualmente
+// (es. assegnato un turno o riposo dentro un periodo ferie)
+function isOnVacationDay(emp, dateISO){
+  if((emp.vacationOverrides||[]).includes(dateISO))return false; // sovrascritto manualmente
+  const d=new Date(dateISO+'T00:00:00');
+  return (emp.vacations||[]).some(v=>{
+    if(!v.from||!v.to)return false;
+    const vf=new Date(v.from+'T00:00:00');
+    const vt=new Date(v.to+'T00:00:00');
+    return d>=vf && d<=vt;
+  });
+}
+
+// Controlla se il dipendente è in ferie per TUTTA la settimana (lun-dom)
+// Usata per escludere completamente un dipendente dalla generazione settimanale
+// solo se è in ferie ogni singolo giorno lavorativo della settimana
+function isOnVacation(emp, weekStartISO){
+  const ws=new Date(weekStartISO+'T00:00:00');
+  // Controlla i giorni aperti: se il dipendente è in ferie in TUTTI i giorni aperti → escludi
+  const openDaysOfWeek=DAYS_KEY.map((k,i)=>({k,i})).filter(({k})=>S.storeHours[k]&&S.storeHours[k].open);
+  if(!openDaysOfWeek.length) return false;
+  return openDaysOfWeek.every(({i})=>{
+    const dayDate=isoDate(addDays(ws,i));
+    return isOnVacationDay(emp,dayDate);
+  });
+}
+
+/* ═══════════════ NAV ═══════════════ */
+function switchTab(tab){
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  const navEl=document.querySelector(`[data-tab="${tab}"]`);
+  if(navEl)navEl.classList.add('active');
+  const secEl=document.getElementById(`tab-${tab}`);
+  if(secEl)secEl.classList.add('active');
+  if(tab==='storehours')renderStoreHours();
+  if(tab==='areas')renderVincoli();
+  if(tab==='schedule')renderSchedule();
+  if(tab==='generate')renderGeneratePage();
+  if(tab==='settings')renderSettings();
+}
+document.querySelectorAll('.nav-tab').forEach(t=>t.addEventListener('click',()=>switchTab(t.dataset.tab)));
+
+/* ═══════════════ RENDER EMPLOYEES ═══════════════ */
+function renderEmployees(){
+  const tb=document.getElementById('empTbody');
+  if(!S.employees.length){
+    tb.innerHTML=`<tr><td colspan="6"><div class="empty"><div class="empty-icon">👤</div><div class="empty-text">Nessun dipendente</div><div class="empty-sub">Aggiungi il primo dipendente in alto</div></div></td></tr>`;
+    return;
+  }
+  tb.innerHTML=S.employees.map(e=>{
+    const hoursLbl=e.hoursType==='fixed'?'Orario Fisso':e.hoursType==='38'?'38h/sett':e.hoursType==='40'?'40h/sett':`${e.customHours||'?'}h/sett`;
+    const chars=[];
+    if(e.isDirectore)chars.push('<span class="badge b-gray">👔 Direttore</span>');
+    if(e.isProfumeria)chars.push('<span class="badge b-purple">🌸 Profumeria</span>');
+    if(e.canOpenStore)chars.push('<span class="badge b-blue">🔑 Apertura</span>');
+    if(e.takesMorningDelivery)chars.push('<span class="badge b-yellow">🚚 Camion 7:00</span>');
+    (e.customChars||[]).forEach(c=>chars.push(`<span class="badge b-gray">${esc(c)}</span>`));
+    const vacPills=(e.vacations||[]).map(v=>`<span class="vac-pill">${v.from} – ${v.to}${v.note?' ('+esc(v.note)+')':''}</span>`).join('');
+    const doff=(e.daysOff||[]).map(d=>`<span class="day-pill">${d}</span>`).join(' ');
+    const dperm=(e.permissionDays||[]).map(d=>`<span class="day-pill perm">${d}</span>`).join(' ');
+    return `<tr>
+      <td><strong>${esc(e.name)}</strong><br><span class="badge ${e.hoursType==='fixed'?'b-blue':'b-green'}" style="margin-top:3px">${hoursLbl}</span></td>
+      <td>${e.hoursType==='fixed'?`<span class="text-xs text-muted">${(e.fixedSchedule||[]).length} turni fissi${e.fixedScheduleB&&e.fixedScheduleB.length>0?' <span class="badge badge-blue" style="font-size:10px;padding:1px 5px">A/B</span>':''}</span>`:'—'}</td>
+      <td><div class="char-tags">${chars.join('')||'<span class="text-muted text-xs">Nessuna</span>'}</div></td>
+      <td>${vacPills||'<span class="text-muted text-xs">Nessun periodo</span>'}</td>
+      <td><div class="flex flex-wrap gap-8">${doff}${dperm}${!doff&&!dperm?'<span class="text-muted text-xs">Nessuna</span>':''}</div></td>
+      <td><div class="flex gap-8"><button class="btn btn-secondary btn-sm btn-icon" onclick="openEmpModal('${e.id}')" title="Modifica">✏️</button>${S.weekSchedules&&S.weekSchedules.length?`<button class="btn btn-primary btn-sm" onclick="confirmRefreshEmp('${e.id}')" title="Rigenera orario per questo dipendente">🔄 Aggiorna</button>`:''}<button class="btn btn-danger btn-sm btn-icon" onclick="deleteEmp('${e.id}')" title="Elimina">🗑</button></div></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ═══════════════ RENDER AREAS ═══════════════ */
+function renderAreas(){
+  const tb=document.getElementById('areaTbody');
+  if(!S.areas.length){
+    tb.innerHTML=`<tr><td colspan="5"><div class="empty"><div class="empty-icon">📋</div><div class="empty-text">Nessuna area</div></div></td></tr>`;
+    return;
+  }
+  tb.innerHTML=S.areas.map(a=>`<tr>
+    <td><span style="width:22px;height:22px;border-radius:4px;display:inline-block;background:${a.color};border:1px solid rgba(0,0,0,.1)"></span></td>
+    <td><strong>${esc(a.name)}</strong></td>
+    <td>${a.minCoverage||1} dip.</td>
+    <td>${a.maxConcurrent?a.maxConcurrent+' dip.':'<span class="text-muted text-xs">Nessun limite</span>'}</td>
+    <td class="text-muted text-xs">${esc(a.notes||'—')}</td>
+    <td><div class="flex gap-8"><button class="btn btn-secondary btn-sm btn-icon" onclick="openAreaModal('${a.id}')" title="Modifica">✏️</button><button class="btn btn-danger btn-sm btn-icon" onclick="deleteArea('${a.id}')" title="Elimina">🗑</button></div></td>
+  </tr>`).join('');
+}
+
+/* ═══════════════ RENDER STORE HOURS ═══════════════ */
+function renderStoreHours(){
+  const body=document.getElementById('storeHoursBody');
+  body.innerHTML=DAYS_KEY.map((key,i)=>{
+    const sh=S.storeHours[key]||{open:false,type:'split',ms:'09:00',me:'13:00',as:'15:30',ae:'19:30'};
+    const dis=sh.open?'':'opacity:.35;pointer-events:none';
+    return `<div class="hours-day-row">
+      <div class="day-name">${DAYS_FULL[i]}</div>
+      <div style="padding-top:6px"><label class="check-item"><input type="checkbox" ${sh.open?'checked':''} onchange="toggleDayOpen('${key}',this.checked)"> Aperto</label></div>
+      <div id="hd_${key}" style="${dis}">
+        <div class="flex gap-16 mb-8 flex-wrap">
+          <label class="check-item"><input type="radio" name="ht_${key}" value="split" ${sh.type!=='continuous'?'checked':''} onchange="setDayType('${key}','split')"> Con pausa pranzo</label>
+          <label class="check-item"><input type="radio" name="ht_${key}" value="continuous" ${sh.type==='continuous'?'checked':''} onchange="setDayType('${key}','continuous')"> Orario continuato</label>
+        </div>
+        <div class="hours-inputs">
+          <span class="hours-sep">Apertura:</span>
+          <input type="time" class="form-control time-input" value="${sh.ms}" onchange="setHour('${key}','ms',this.value)">
+          <span id="me_sep_${key}" class="hours-sep" ${sh.type==='continuous'?'style="display:none"':''}>–</span>
+          <input type="time" class="form-control time-input" id="me_inp_${key}" value="${sh.me}" onchange="setHour('${key}','me',this.value)" ${sh.type==='continuous'?'style="display:none"':''}>
+          <span id="pm_block_${key}" class="hours-inputs" ${sh.type==='continuous'?'style="display:none"':''}>
+            <span class="hours-sep">Pom.:</span>
+            <input type="time" class="form-control time-input" value="${sh.as}" onchange="setHour('${key}','as',this.value)">
+            <span class="hours-sep">–</span>
+          </span>
+          <input type="time" class="form-control time-input" value="${sh.ae}" onchange="setHour('${key}','ae',this.value)">
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function toggleDayOpen(key,open){S.storeHours[key].open=open;const el=document.getElementById(`hd_${key}`);if(el){el.style.opacity=open?'1':'0.35';el.style.pointerEvents=open?'':'none'}save()}
+function setDayType(key,type){S.storeHours[key].type=type;['me_sep','me_inp','pm_block'].forEach(p=>{const el=document.getElementById(`${p}_${key}`);if(el)el.style.display=type==='continuous'?'none':''});save()}
+function setHour(key,field,val){S.storeHours[key][field]=val;save()}
+function saveStoreHours(){
+  // Validazione: chiusura dopo apertura, pausa coerente
+  const errors=[];
+  DAYS_KEY.forEach((k,i)=>{
+    const sh=S.storeHours[k];
+    if(!sh||!sh.open)return;
+    if(sh.type==='split'){
+      if(t2m(sh.me)<=t2m(sh.ms))errors.push(`${DAYS_FULL[i]}: fine mattina prima dell'apertura`);
+      if(t2m(sh.as)<t2m(sh.me))errors.push(`${DAYS_FULL[i]}: inizio pomeriggio prima della fine mattina`);
+      if(t2m(sh.ae)<=t2m(sh.as))errors.push(`${DAYS_FULL[i]}: chiusura prima dell'inizio pomeriggio`);
+    } else {
+      if(t2m(sh.ae)<=t2m(sh.ms))errors.push(`${DAYS_FULL[i]}: chiusura prima o uguale all'apertura`);
+    }
+  });
+  if(errors.length){
+    toast('⚠️ Errori orari: '+errors[0]);
+    return;
+  }
+  save();toast('Orari negozio salvati ✓');
+}
+
+/* ═══════════════ GENERATE PAGE ═══════════════ */
+function renderGeneratePage(){
+  if(!S.currentWeekStart)S.currentWeekStart=isoDate(getMonday(new Date()));
+  document.getElementById('numWeeks').value=S.genWeekCount||1;
+  updateWeekDisplay();
+  const cd=S.camionDays||{};
+  const labels={mon:'Lun',tue:'Mar',wed:'Mer',thu:'Gio',fri:'Ven',sat:'Sab',sun:'Dom'};
+  document.getElementById('camionDaysGroup').innerHTML=
+    DAYS_KEY.map(k=>`<label class="check-item"><input type="checkbox" id="cam_${k}" ${cd[k]?'checked':''}> ${labels[k]}</label>`).join('');
+}
+function saveCamionDays(){
+  if(!S.camionDays)S.camionDays={mon:false,tue:false,wed:false,thu:false,fri:false,sat:false,sun:false};
+  DAYS_KEY.forEach(k=>{S.camionDays[k]=!!(document.getElementById('cam_'+k)||{}).checked});
+  save();toast('Giorni camion salvati');
+}
+function updateWeekDisplay(){
+  if(!S.currentWeekStart)return;
+  document.getElementById('weekLabel').textContent=weekRange(S.currentWeekStart);
+  // type="week" expects "YYYY-Www"
+  const d=new Date(S.currentWeekStart+'T00:00:00');
+  const jan4=new Date(d.getFullYear(),0,4);
+  const startOfW1=new Date(jan4);
+  startOfW1.setDate(jan4.getDate()-((jan4.getDay()+6)%7));
+  const weekNum=Math.round((d-startOfW1)/(7*24*3600*1000))+1;
+  document.getElementById('weekPicker').value=`${d.getFullYear()}-W${String(weekNum).padStart(2,'0')}`;
+}
+function prevWeek(){const ws=new Date(S.currentWeekStart+'T00:00:00');ws.setDate(ws.getDate()-7);S.currentWeekStart=isoDate(ws);save();updateWeekDisplay()}
+function nextWeek(){const ws=new Date(S.currentWeekStart+'T00:00:00');ws.setDate(ws.getDate()+7);S.currentWeekStart=isoDate(ws);save();updateWeekDisplay()}
+function setWeekFromPicker(v){
+  if(!v)return;
+  // v = "YYYY-Www"
+  const[yearStr,weekStr]=v.split('-W');
+  const year=parseInt(yearStr),week=parseInt(weekStr);
+  const jan4=new Date(year,0,4);
+  const startOfW1=new Date(jan4);
+  startOfW1.setDate(jan4.getDate()-((jan4.getDay()+6)%7));
+  const monday=new Date(startOfW1);
+  monday.setDate(startOfW1.getDate()+(week-1)*7);
+  S.currentWeekStart=isoDate(monday);
+  save();updateWeekDisplay();
+}
+
+/* ═══════════════ SCHEDULE GENERATION CORE ═══════════════ */
+// restHistory: {empId: dayKey} — last rest day each employee had (for rotation)
+// weekIndex: 0-based index of this week in the generation batch (for biweekly A/B)
+function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=0){
+  const weekStart=new Date(weekStartISO+'T00:00:00');
+  const avail=S.employees.filter(e=>!isOnVacation(e,weekStartISO));
+
+  if(!avail.length){
+    warnings.push(`Settimana ${weekRange(weekStartISO)}: nessun dipendente disponibile (tutti in ferie).`);
+    return {weekStart:weekStartISO,days:{}};
+  }
+
+  const sch={weekStart:weekStartISO,days:{}};
+  DAYS_KEY.forEach(k=>{sch.days[k]={shifts:[],dayOff:[]}});
+
+  const worked={};        // ore lavorate correnti per dipendente
+  const overtimeH={};     // ore straordinarie per dipendente (inizia a 0)
+  avail.forEach(e=>{worked[e.id]=0;overtimeH[e.id]=0});
+
+  const openDays=DAYS_KEY.filter(k=>S.storeHours[k]&&S.storeHours[k].open);
+
+  // Mark closed days for everyone
+  DAYS_KEY.filter(k=>!S.storeHours[k]||!S.storeHours[k].open).forEach(ck=>{
+    avail.forEach(e=>{if(!sch.days[ck].dayOff.includes(e.id))sch.days[ck].dayOff.push(e.id)});
+  });
+
+  // Fixed schedule employees — support biweekly A/B
+  const fixedEmps=avail.filter(e=>e.hoursType==='fixed'||e.isDirectore);
+  const flexEmps =avail.filter(e=>e.hoursType!=='fixed'&&!e.isDirectore);
+
+  // ── PASSO 0: PREFERENZE DIPENDENTI ──
+  // I dipendenti possono indicare una data specifica (all'interno della settimana da
+  // generare) in cui preferiscono lavorare al mattino o al pomeriggio. Il sistema tenta
+  // di accontentarle nei limiti dei vincoli operativi (orari negozio, ferie/assenze, ore
+  // consecutive, turno minimo); se non è possibile la preferenza viene ignorata e
+  // segnalata negli avvisi. Si applica solo ai dipendenti flex.
+  const prefWorkDayMap={};      // empId -> giorno in cui è stato pre-assegnato un turno preferito
+  const prefWorkSundaySet=new Set(); // empId con preferenza che cade di domenica
+  const weekEndISO=isoDate(addDays(weekStart,6));
+  flexEmps.forEach(emp=>{
+    const pref=(emp.datePreferences||[]).find(p=>p.date>=weekStartISO&&p.date<=weekEndISO);
+    if(!pref)return;
+    const dIdx=(new Date(pref.date+'T00:00:00').getDay()+6)%7; // 0=lun..6=dom
+    const dayKey=DAYS_KEY[dIdx];
+    if(dayKey==='sun'){prefWorkSundaySet.add(emp.id);return}
+
+    // Pre-assegna PRIMA della copertura automatica, così l'algoritmo tiene già conto
+    // di queste ore nel bilancio del dipendente.
+    if(!openDays.includes(dayKey)){
+      warnings.push(`⭐ Preferenza ${emp.name} (${fmtShort(new Date(pref.date+'T00:00:00'))}): negozio chiuso, non applicata.`);
+      return;
+    }
+    if((emp.daysOff||[]).includes(pref.date)||(emp.permissionDays||[]).includes(pref.date)||isOnVacationDay(emp,pref.date)){
+      warnings.push(`⭐ Preferenza ${emp.name} (${fmtShort(new Date(pref.date+'T00:00:00'))}): assente quel giorno, non applicata.`);
+      return;
+    }
+    const sh0=S.storeHours[dayKey];
+    if(!sh0||!sh0.open)return;
+    // Determina l'intervallo mattina/pomeriggio in base al tipo di orario del negozio
+    let reqS,reqE;
+    if(sh0.type==='split'){
+      if(pref.slot==='afternoon'){reqS=t2m(sh0.as);reqE=t2m(sh0.ae);}
+      else{reqS=t2m(sh0.ms);reqE=t2m(sh0.me);}
+    } else {
+      const openM=t2m(sh0.ms),closeM=t2m(sh0.ae);const mid=openM+Math.round((closeM-openM)/2);
+      if(pref.slot==='afternoon'){reqS=mid;reqE=closeM;}
+      else{reqS=openM;reqE=mid;}
+    }
+    const periods=sh0.type==='split'?[[t2m(sh0.ms),t2m(sh0.me)],[t2m(sh0.as),t2m(sh0.ae)]]:[[t2m(sh0.ms),t2m(sh0.ae)]];
+    const maxHp=empMaxH(emp);
+    let placed=false;
+    for(const [pS,pE] of periods){
+      if(maxHp>0&&(worked[emp.id]||0)>=maxHp-0.1)break;
+      const s=Math.max(pS,reqS), e=Math.min(pE,reqE);
+      if(e-s<MIN_SHIFT_M)continue;
+      let durM=Math.min(e-s,6*60); // rispetta il max 6h consecutive
+      if(maxHp>0){const remainM=Math.round((maxHp-(worked[emp.id]||0))*60);durM=Math.min(durM,Math.max(remainM,0));}
+      if(durM<MIN_SHIFT_M)continue;
+      const endM=s+durM;
+      if(S.maxConcurrentTotal){
+        const conc=sch.days[dayKey].shifts.filter(x=>t2m(x.startTime)<=s&&t2m(x.endTime)>s).length;
+        if(conc>=S.maxConcurrentTotal)continue;
+      }
+      const areaCnt={};S.areas.forEach(a=>{areaCnt[a.id]=sch.days[dayKey].shifts.filter(x=>x.areaId===a.id).length});
+      let aId='';
+      if(emp.isProfumeria){const pA=S.areas.find(a=>a.name.toLowerCase().includes('profumeria'));if(pA)aId=pA.id}
+      if(!aId){const free=S.areas.find(a=>!areaCnt[a.id]);aId=free?free.id:(S.areas[0]||{id:''}).id}
+      const h=shiftH(m2t(s),m2t(endM));
+      sch.days[dayKey].shifts.push({employeeId:emp.id,startTime:m2t(s),endTime:m2t(endM),areaId:aId,hours:h,preferred:true});
+      worked[emp.id]=(worked[emp.id]||0)+h;
+      placed=true;
+    }
+    if(placed)prefWorkDayMap[emp.id]=dayKey;
+    else warnings.push(`⭐ Preferenza ${emp.name} (${fmtShort(new Date(pref.date+'T00:00:00'))} ${pref.slot==='afternoon'?'pomeriggio':'mattina'}): non compatibile con l'orario negozio, non applicata.`);
+  });
+
+  fixedEmps.forEach(emp=>{
+    const hasBiweekly=emp.fixedScheduleB&&emp.fixedScheduleB.length>0;
+    let activeSchedule=emp.fixedSchedule||[];
+    if(hasBiweekly){
+      const startOffset=emp.biweeklyFirstWeek==='B'?1:0;
+      const useB=(weekIndex+startOffset)%2===1;
+      if(useB)activeSchedule=emp.fixedScheduleB;
+    }
+    const effectiveSchedule=emp.isDirectore?activeSchedule.filter(fs=>fs.day!=='sun'):activeSchedule;
+    effectiveSchedule.forEach(fs=>{
+      const dk=fs.day;
+      if(!sch.days[dk]||!S.storeHours[dk]||!S.storeHours[dk].open)return;
+      if(fs.type==='split'&&fs.startTime2&&fs.endTime2){
+        // Turno spezzato: due shift separati
+        const h1=shiftH(fs.startTime,fs.endTime);
+        const h2=shiftH(fs.startTime2,fs.endTime2);
+        sch.days[dk].shifts.push({employeeId:emp.id,startTime:fs.startTime,endTime:fs.endTime,areaId:fs.areaId||'',hours:h1});
+        sch.days[dk].shifts.push({employeeId:emp.id,startTime:fs.startTime2,endTime:fs.endTime2,areaId:fs.areaId2||fs.areaId||'',hours:h2});
+        worked[emp.id]=(worked[emp.id]||0)+h1+h2;
+      } else {
+        // Turno continuato (o legacy senza tipo)
+        const h=shiftH(fs.startTime,fs.endTime);
+        sch.days[dk].shifts.push({employeeId:emp.id,startTime:fs.startTime,endTime:fs.endTime,areaId:fs.areaId||'',hours:h});
+        worked[emp.id]=(worked[emp.id]||0)+h;
+      }
+    });
+    const workedDays=[...new Set(effectiveSchedule.map(fs=>fs.day))];
+    const lastRest=restHistory[emp.id];
+    let restDay;
+    if(emp.isDirectore&&openDays.includes('sun')){
+      restDay='sun';
+    } else {
+      restDay=openDays.find(d=>!workedDays.includes(d)&&d!==lastRest)||openDays.find(d=>!workedDays.includes(d));
+    }
+    if(restDay&&!sch.days[restDay].dayOff.includes(emp.id))sch.days[restDay].dayOff.push(emp.id);
+  });
+
+  // ── DOMENICA: sempre 3 persone totali ──
+  // Regola:
+  //  - Se ci sono dipendenti fissi con turno domenica → flex aggiuntivi = 3 - fissi
+  //    (il fisso copre il suo orario parziale; i flex coprono tutta la giornata)
+  //  - Se nessun fisso domenica → 3 flex con turno completo
+  //  - Mai meno di 3 persone domenica (salvo carenza reale di personale)
+  //  - I flex domenica fanno sempre turno completo apertura→chiusura
+  //  - Rotazione settimanale tra i flex
+  const SUN_WORKERS_TOTAL=3;
+  const sunWorkerIds=new Set();
+  const sundayOpen=openDays.includes('sun')&&S.storeHours['sun']&&S.storeHours['sun'].open;
+  let fixedSunCount=0; // dichiarata qui per essere accessibile nel loop openDays
+
+  if(sundayOpen){
+    const sunDate=isoDate(addDays(weekStart,6));
+
+    const fixedSunWorkers=fixedEmps.filter(emp=>{
+      if(isOnVacation(emp,weekStartISO))return false;
+      if((emp.daysOff||[]).includes(sunDate))return false;
+      if((emp.permissionDays||[]).includes(sunDate))return false;
+      const hasBiweekly=emp.fixedScheduleB&&emp.fixedScheduleB.length>0;
+      let activeSch=emp.fixedSchedule||[];
+      if(hasBiweekly){
+        const startOffset=emp.biweeklyFirstWeek==='B'?1:0;
+        if((weekIndex+startOffset)%2===1)activeSch=emp.fixedScheduleB;
+      }
+      return activeSch.some(fs=>fs.day==='sun');
+    });
+    fixedSunCount=fixedSunWorkers.length;
+    const flexNeeded=Math.max(0,SUN_WORKERS_TOTAL-fixedSunCount);
+
+    // Candidati flex domenica
+    const sunCandidates=flexEmps.filter(emp=>{
+      if(emp.isDirectore)return false;
+      if((emp.daysOff||[]).includes(sunDate))return false;
+      if((emp.permissionDays||[]).includes(sunDate))return false;
+      if(isOnVacationDay(emp,sunDate))return false; // ferie quel giorno
+      return true;
+    });
+
+    // Rotazione: penalizza chi ha lavorato domenica più di recente
+    // + boost preferenza: chi ha indicato di preferire lavorare quella domenica va avanti
+    const sorted=[...sunCandidates].sort((a,b)=>{
+      const boostA=prefWorkSundaySet.has(a.id)?-1000:0;
+      const boostB=prefWorkSundaySet.has(b.id)?-1000:0;
+      if(boostA!==boostB)return boostA-boostB;
+      const lastA=restHistory['sun_'+a.id]||(-1);
+      const lastB=restHistory['sun_'+b.id]||(-1);
+      if(lastA!==lastB)return lastA-lastB;
+      return sunCandidates.indexOf(a)-sunCandidates.indexOf(b);
+    });
+
+    // Prendi i primi flexNeeded — ma garantendo almeno un'esperta profumeria
+    // (priorità profumeria: tutti i giorni di apertura, domenica inclusa)
+    const chosen=[];
+    const profSunAlready=fixedSunWorkers.some(e=>e.isProfumeria);
+    if(!profSunAlready){
+      const profSun=sorted.find(e=>e.isProfumeria);
+      if(profSun&&flexNeeded>0)chosen.push(profSun);
+    }
+    for(const e of sorted){
+      if(chosen.length>=flexNeeded)break;
+      if(!chosen.includes(e))chosen.push(e);
+    }
+    chosen.forEach(e=>sunWorkerIds.add(e.id));
+
+    // Tutti i flex non scelti → dayOff domenica
+    flexEmps.forEach(emp=>{
+      if(!sunWorkerIds.has(emp.id)&&!sch.days['sun'].dayOff.includes(emp.id)){
+        sch.days['sun'].dayOff.push(emp.id);
+      }
+    });
+  }
+
+  // Assign rest days for flex employees — ROTATING
+  // (domenica già gestita sopra per i non-selezionati)
+  const restCount={};
+  openDays.forEach(d=>{restCount[d]=0});
+  avail.forEach(e=>{
+    DAYS_KEY.forEach(k=>{if(sch.days[k].dayOff.includes(e.id)&&S.storeHours[k]&&S.storeHours[k].open)restCount[k]=(restCount[k]||0)+1});
+  });
+  const restPref=['mon','tue','wed','thu','fri','sat','sun'];
+  // Quante esperte profumeria riposano già in ciascun giorno: serve a distribuire
+  // i loro riposi (priorità: ogni giorno di apertura deve avere una profumeria).
+  const profRestCount={};
+  openDays.forEach(d=>{profRestCount[d]=avail.filter(e=>e.isProfumeria&&sch.days[d].dayOff.includes(e.id)).length});
+  flexEmps.forEach(emp=>{
+    const lastRest=restHistory[emp.id];
+    let chosen;
+    if(emp.isDirectore&&openDays.includes('sun')){
+      chosen='sun';
+    } else if(sundayOpen&&!sunWorkerIds.has(emp.id)){
+      // Già messo in dayOff domenica — trova un altro giorno di riposo tra lun-sab
+      // (ha già il riposo domenica, ma ne serve uno anche infrasettimanale se contratto lo richiede)
+      // In realtà la domenica È il suo giorno di riposo settimanale
+      // Non assegnare un secondo riposo — la domenica conta come riposo
+      return; // già gestito sopra
+    } else {
+      // Lavoratori domenica o giorni normali: assegna riposo rotante lun-sab
+      const weekdaysOnly=openDays.filter(d=>d!=='sun');
+      let pool=weekdaysOnly.length>0?weekdaysOnly:openDays;
+      // Il dipendente camion NON può riposare nei giorni camion: escludili dal pool
+      if(emp.takesMorningDelivery){
+        const noCamion=pool.filter(d=>!(S.camionDays&&S.camionDays[d]));
+        if(noCamion.length>0)pool=noCamion; // usa solo giorni non-camion; se vuoto lascia il pool intero
+      }
+      // Escludi il giorno in cui è stato pre-assegnato un turno preferito (non può riposarci)
+      const prefWD=prefWorkDayMap[emp.id];
+      if(prefWD&&pool.includes(prefWD)&&pool.length>1){
+        pool=pool.filter(d=>d!==prefWD);
+      }
+      const sorted2=[...pool].sort((a,b)=>{
+        // penalità extra per le esperte profumeria: evita che due esperte riposino
+        // lo stesso giorno, così ogni giornata resta coperta dalla profumeria
+        const profA=emp.isProfumeria?(profRestCount[a]||0)*50:0;
+        const profB=emp.isProfumeria?(profRestCount[b]||0)*50:0;
+        const penA=(a===lastRest?100:0)+(restCount[a]||0)+profA;
+        const penB=(b===lastRest?100:0)+(restCount[b]||0)+profB;
+        if(penA!==penB)return penA-penB;
+        return restPref.indexOf(a)-restPref.indexOf(b);
+      });
+      chosen=sorted2[0];
+    }
+    if(chosen&&!sch.days[chosen].dayOff.includes(emp.id)){
+      sch.days[chosen].dayOff.push(emp.id);
+      restCount[chosen]=(restCount[chosen]||0)+1;
+      if(emp.isProfumeria)profRestCount[chosen]=(profRestCount[chosen]||0)+1;
+    }
+  });
+
+  // ── HELPER: ore consecutive accumulate da empId fino a cursorM (catena senza gap ≥2h) ──
+  const consecHAt=(empId,cursorM,dayKey)=>{
+    const prevS=sch.days[dayKey].shifts
+      .filter(s=>s.employeeId===empId&&t2m(s.endTime)<=cursorM)
+      .sort((a,b)=>t2m(b.startTime)-t2m(a.startTime));
+    let mins=0,ref=cursorM;
+    for(const s of prevS){
+      if(ref-t2m(s.endTime)>=120)break;
+      mins+=t2m(s.endTime)-t2m(s.startTime);
+      ref=t2m(s.startTime);
+    }
+    return mins/60;
+  };
+
+  // ── HELPER: ALTERNANZA MATTINA / POMERIGGIO ──
+  // Regola: nessuno deve fare sempre lo stesso turno (tutte mattine o tutti pomeriggi).
+  // Si tiene traccia, per ogni dipendente, di quante mattine e quanti pomeriggi ha già
+  // fatto nella settimana e di quale turno ha fatto il giorno precedente; il punteggio
+  // che ne deriva ordina i candidati nelle fasi di copertura e riempimento.
+
+  // Classifica un turno come 'morning' o 'afternoon' in base a dove cade la maggior parte
+  const slotOf=(dk,startT,endT)=>{
+    const shd=S.storeHours[dk];
+    if(!shd)return 'morning';
+    const s=t2m(startT),e=t2m(endT);
+    const mid=shd.type==='split'
+      ? Math.round((t2m(shd.me)+t2m(shd.as))/2)
+      : t2m(shd.ms)+Math.round((t2m(shd.ae)-t2m(shd.ms))/2);
+    const mornMin=Math.max(0,Math.min(e,mid)-s);
+    const aftMin =Math.max(0,e-Math.max(s,mid));
+    return aftMin>mornMin?'afternoon':'morning';
+  };
+
+  // Statistiche mattine/pomeriggi sui giorni PRECEDENTI a uptoIdx (esclusivo)
+  const computeSlotStats=(uptoIdx)=>{
+    const st={};
+    avail.forEach(e=>{st[e.id]={morning:0,afternoon:0,last:null,lastDayIdx:-5}});
+    DAYS_KEY.forEach((dk,idx)=>{
+      if(idx>=uptoIdx)return;
+      if(!sch.days[dk])return;
+      const perEmp={};
+      sch.days[dk].shifts.forEach(s=>{
+        const sl=slotOf(dk,s.startTime,s.endTime);
+        if(!perEmp[s.employeeId])perEmp[s.employeeId]={};
+        perEmp[s.employeeId][sl]=true;
+      });
+      Object.keys(perEmp).forEach(eid=>{
+        if(!st[eid])st[eid]={morning:0,afternoon:0,last:null,lastDayIdx:-5};
+        const sls=Object.keys(perEmp[eid]);
+        sls.forEach(sl=>{st[eid][sl]++});
+        st[eid].last=sls.length===1?sls[0]:'both';
+        st[eid].lastDayIdx=idx;
+      });
+    });
+    return st;
+  };
+
+  // Punteggio di penalità: più alto = meno adatto a fare QUEL turno oggi
+  const slotScore=(st,emp,slot,dayIdx)=>{
+    const s=st[emp.id];
+    if(!s)return 0;
+    const other=slot==='morning'?'afternoon':'morning';
+    let p=0;
+    // Penalizza SOLO lo squilibrio (non il volume di ore): chi fa già più mattine che
+    // pomeriggi — o viceversa — passa in coda quando si assegna il turno più frequente.
+    const diff=s[slot]-s[other];
+    if(diff>0)p+=diff*2;
+    // Chi ieri ha fatto SOLO questo turno (non giornata intera) oggi cambia
+    if(s.last===slot&&s.lastDayIdx===dayIdx-1)p+=3;
+    return p;
+  };
+
+  // ── PASSO 1: calcola deficit orario totale della settimana ──
+  const totalContractH=flexEmps.reduce((s,e)=>s+(empMaxH(e)||0),0);
+  // stima ore necessarie a coprire minimo 1 persona per area non-magazzino per giorno aperto
+  const totalAreaCovH=openDays.reduce((s,dk)=>{
+    const sh=S.storeHours[dk];if(!sh)return s;
+    const dayH_val=sh.type==='split'?(t2m(sh.me)-t2m(sh.ms))/60+(t2m(sh.ae)-t2m(sh.as))/60:(t2m(sh.ae)-t2m(sh.ms))/60;
+    return s+dayH_val*S.areas.filter(a=>!a.name.toLowerCase().includes('magazzino')).length;
+  },0);
+  const deficit=Math.max(0,totalAreaCovH-totalContractH);
+  // distribuisci extra equamente tra flex emps (senza direttori?)
+  const otPerEmp=flexEmps.length>0?Math.ceil((deficit/flexEmps.length)*2)/2:0; // arrotonda a 0.5h
+  const extraBudget={}; // ore straordinarie aggiuntive per dipendente
+  if(otPerEmp>0){
+    flexEmps.forEach(e=>{extraBudget[e.id]=otPerEmp});
+  }
+
+  // ── PASSO 2: assegna turni giorno per giorno ──
+  // Strategia: prima riempi la settimana (priorità 1), poi ottimizza aree (priorità 2).
+  // Per ogni giorno aperto:
+  //   a) Camion 07:00 (con regola min 11:00)
+  //   b) coverPeriod: aree non-magazzino (obbligo), poi magazzino (sacrificabile)
+  //   c) fillHours: ore contrattuali residue + eventuali straordinari
+  const isMagArea=a=>a.name.toLowerCase().includes('magazzino');
+  const nonMagAreas=S.areas.filter(a=>!isMagArea(a));
+  const magAreas   =S.areas.filter(a=>isMagArea(a));
+
+  if(!S.areas.length){
+    warnings.push(`⚠️ Nessuna area configurata — i turni vengono assegnati senza area. Configura le aree prima di generare.`);
+  }
+
+  // ── PASSO 1-bis: PRIORITÀ PROFUMERIA — PRIMA si coprono TUTTI i giorni ──
+  // Regola richiesta: per prima cosa si mettono a copertura di ogni giornata di apertura
+  // le dipendenti esperte di profumeria; solo dopo l'algoritmo completa il resto della
+  // copertura con gli altri dipendenti. Per ogni giorno si pre-assegna un turno (mattina
+  // o pomeriggio, alternando) a un'esperta ancora disponibile, riservandole una quota di
+  // ore così che il monte ore non si esaurisca sui primi giorni della settimana.
+  const profAreaMain=S.areas.find(a=>a.name.toLowerCase().includes('profumeria'));
+  const profEmps=flexEmps.filter(e=>e.isProfumeria);
+  if(profEmps.length){
+    const profDays=openDays.filter(d=>d!=='sun'); // domenica gestita a parte (3 persone)
+    profDays.forEach(dayKey=>{
+      const dIdx=DAYS_KEY.indexOf(dayKey);
+      const shd=S.storeHours[dayKey];
+      if(!shd||!shd.open)return;
+      const dDate=isoDate(addDays(weekStart,dIdx));
+
+      // Giorno già coperto da un'esperta (turno fisso o preferenza)? Nulla da fare.
+      const already=sch.days[dayKey].shifts.some(s=>{const e=getEmp(s.employeeId);return e&&e.isProfumeria});
+      if(already)return;
+
+      const cands=profEmps.filter(emp=>{
+        if(sch.days[dayKey].dayOff.includes(emp.id))return false;
+        if((emp.daysOff||[]).includes(dDate))return false;
+        if((emp.permissionDays||[]).includes(dDate))return false;
+        if(isOnVacationDay(emp,dDate))return false;
+        const maxH=empMaxH(emp);
+        return maxH<=0||(worked[emp.id]||0)<maxH-MIN_SHIFT_M/60;
+      });
+      // Nessuna esperta disponibile/collocabile: la giornata verrà coperta dagli altri
+      // dipendenti e segnalata dall'avviso finale di copertura profumeria.
+      if(!cands.length)return;
+
+      // Periodi mattina/pomeriggio del giorno
+      const periods=shd.type==='split'
+        ? [['morning',t2m(shd.ms),t2m(shd.me)],['afternoon',t2m(shd.as),t2m(shd.ae)]]
+        : (()=>{const o=t2m(shd.ms),c=t2m(shd.ae),mid=o+Math.round((c-o)/2);
+                return [['morning',o,mid],['afternoon',mid,c]]})();
+
+      const stats=computeSlotStats(dIdx);
+      let best=null;
+      cands.forEach(emp=>{
+        const maxH=empMaxH(emp);
+        const residual=maxH>0?maxH-(worked[emp.id]||0):9;
+        // giorni residui (oggi incluso) in cui questa esperta può lavorare → quota giornaliera
+        let remDays=0;
+        profDays.forEach(dk=>{
+          const i=DAYS_KEY.indexOf(dk);
+          if(i<dIdx)return;
+          if(sch.days[dk].dayOff.includes(emp.id))return;
+          const dd=isoDate(addDays(weekStart,i));
+          if((emp.daysOff||[]).includes(dd)||(emp.permissionDays||[]).includes(dd)||isOnVacationDay(emp,dd))return;
+          remDays++;
+        });
+        const quotaM=Math.max(MIN_SHIFT_M,Math.round(residual/Math.max(1,remDays)*60));
+        periods.forEach(([slot,pS,pE])=>{
+          // già in turno in quel periodo?
+          if(sch.days[dayKey].shifts.some(s=>s.employeeId===emp.id&&t2m(s.startTime)<pE&&t2m(s.endTime)>pS))return;
+          if(S.maxConcurrentTotal){
+            const conc=sch.days[dayKey].shifts.filter(x=>t2m(x.startTime)<=pS&&t2m(x.endTime)>pS).length;
+            if(conc>=S.maxConcurrentTotal)return;
+          }
+          const durM=Math.min(pE-pS,6*60,Math.round(residual*60),quotaM);
+          if(durM<MIN_SHIFT_M)return;
+          // punteggio: penalità alternanza, a parità premia chi ha più ore residue
+          const sc=slotScore(stats,emp,slot,dIdx)-residual*0.3;
+          if(!best||sc<best.sc)best={emp,slot,pS,durM,sc};
+        });
+      });
+
+      if(!best)return;
+      const endM=best.pS+best.durM;
+      const aId=(profAreaMain&&profAreaMain.id)||((nonMagAreas[0]||S.areas[0]||{id:''}).id);
+      const h=shiftH(m2t(best.pS),m2t(endM));
+      sch.days[dayKey].shifts.push({
+        employeeId:best.emp.id,startTime:m2t(best.pS),endTime:m2t(endM),
+        areaId:aId,hours:h,profPriority:true
+      });
+      worked[best.emp.id]=(worked[best.emp.id]||0)+h;
+    });
+  }
+
+  openDays.forEach(dayKey=>{
+    const dayIdx=DAYS_KEY.indexOf(dayKey);
+    const sh=S.storeHours[dayKey];
+    const dayDate=isoDate(addDays(weekStart,dayIdx));
+    const isSplit=sh.type==='split';
+
+    const working=avail.filter(emp=>{
+      if(sch.days[dayKey].dayOff.includes(emp.id))return false;
+      if((emp.daysOff||[]).includes(dayDate))return false;
+      if((emp.permissionDays||[]).includes(dayDate))return false;
+      if(isOnVacationDay(emp,dayDate))return false; // ferie per questo giorno specifico
+      if(emp.hoursType==='fixed'||emp.isDirectore)return false; // direttore = solo tappabuchi
+      return true;
+    });
+
+    // ── DIRETTORE TAPPABUCHI (funzione) ──
+    // Il direttore copre le aree non-magazzino rimaste scoperte, max 3h/giorno,
+    // nei periodi in cui non è già in turno fisso. Domenica esclusa.
+    // Funziona anche quando non ci sono dipendenti flex disponibili (giorni scoperti).
+    function coverDirectorGaps(){
+      if(dayKey==='sun')return;
+      const directors=avail.filter(e=>e.isDirectore&&!isOnVacationDay(e,dayDate)&&!(e.daysOff||[]).includes(dayDate)&&!(e.permissionDays||[]).includes(dayDate));
+      directors.forEach(dir=>{
+        let dirCovMin=0;
+        const MAX_DIR_MIN=180; // max 3h/giorno
+        const periods=isSplit?[[t2m(sh.ms),t2m(sh.me)],[t2m(sh.as),t2m(sh.ae)]]:[[t2m(sh.ms),t2m(sh.ae)]];
+        periods.forEach(([pS,pE])=>{
+          if(dirCovMin>=MAX_DIR_MIN)return;
+          const dirBusy=sch.days[dayKey].shifts.some(s=>s.employeeId===dir.id&&t2m(s.startTime)<pE&&t2m(s.endTime)>pS);
+          if(dirBusy)return;
+          const uncoveredArea=nonMagAreas.find(a=>!sch.days[dayKey].shifts.some(s=>s.areaId===a.id&&t2m(s.startTime)<=pS&&t2m(s.endTime)>pS));
+          if(!uncoveredArea)return;
+          const remainMin=MAX_DIR_MIN-dirCovMin;
+          const covMin=Math.min(remainMin,pE-pS,3*60);
+          if(covMin<60)return;
+          const endM=pS+covMin;
+          const h=shiftH(m2t(pS),m2t(endM));
+          sch.days[dayKey].shifts.push({employeeId:dir.id,startTime:m2t(pS),endTime:m2t(endM),areaId:uncoveredArea.id,hours:h,directorGap:true});
+          worked[dir.id]=(worked[dir.id]||0)+h;
+          dirCovMin+=covMin;
+        });
+      });
+    }
+
+    if(!working.length){
+      coverDirectorGaps(); // il direttore può comunque tappare i buchi
+      warnings.push(`${DAYS_FULL[dayIdx]} (${weekRange(weekStartISO)}): nessun dipendente flex disponibile`);
+      return;
+    }
+
+    // ── DOMENICA: turno completo per i 3 selezionati ──
+    // I 3 lavoratori domenicali fanno un unico turno dall'apertura alla chiusura
+    // senza spezzato. Non si applica coverPeriod/fillHours normali.
+    if(dayKey==='sun'&&sundayOpen&&sunWorkerIds.size>0){
+      const sh_sun=S.storeHours['sun'];
+      // Orario completo: dall'apertura mattina alla chiusura pomeriggio (o sera se continuato)
+      const sunStart=sh_sun.ms;
+      const sunEnd=sh_sun.ae;
+      const sunH=shiftH(sunStart,sunEnd);
+      // Area: distribuisci i 3 su aree diverse se possibile
+      const sunAreas=[...nonMagAreas,...magAreas];
+      let areaIdx=0;
+      working.filter(emp=>sunWorkerIds.has(emp.id)).forEach(emp=>{
+        const area=sunAreas[areaIdx%sunAreas.length]||sunAreas[0];
+        areaIdx++;
+        const base=empMaxH(emp);
+        const alreadyWorked=worked[emp.id]||0;
+        const isOT=base>0&&(alreadyWorked+sunH)>base;
+        sch.days['sun'].shifts.push({
+          employeeId:emp.id,
+          startTime:sunStart,
+          endTime:sunEnd,
+          areaId:area?area.id:'',
+          hours:sunH,
+          sundayFull:true,
+          overtime:isOT||undefined
+        });
+        worked[emp.id]=(worked[emp.id]||0)+sunH;
+        if(isOT){
+          const otH=Math.min(sunH,(alreadyWorked+sunH)-base);
+          overtimeH[emp.id]=(overtimeH[emp.id]||0)+otH;
+        }
+      });
+      // Segna domenica come lavorata per rotazione futura
+      sunWorkerIds.forEach(id=>{restHistory['sun_'+id]=weekIndex});
+      // Avviso se meno di 3 disponibili
+      const actualFlex=working.filter(emp=>sunWorkerIds.has(emp.id)).length;
+      const totalSun=actualFlex+fixedSunCount;
+      if(totalSun<SUN_WORKERS_TOTAL){
+        const msg=fixedSunCount>0
+          ? `Domenica (${weekRange(weekStartISO)}): presenti ${totalSun} su ${SUN_WORKERS_TOTAL} (${fixedSunCount} fisso + ${actualFlex} flex su ${Math.max(0,SUN_WORKERS_TOTAL-fixedSunCount)} richiesti) — carenza personale`
+          : `Domenica (${weekRange(weekStartISO)}): solo ${actualFlex} su ${SUN_WORKERS_TOTAL} lavoratori disponibili — carenza personale`;
+        warnings.push(msg);
+      }
+      return; // domenica gestita — salta coverPeriod e fillHours normali
+    }
+    const isCamionDay=!!(S.camionDays&&S.camionDays[dayKey]);
+    if(isCamionDay&&magAreas.length&&t2m(sh.ms)>t2m('07:00')){
+      const camEmp=working.find(e=>e.takesMorningDelivery);
+      if(camEmp){
+        // deve lavorare almeno fino alle 11:00 (regola: chi entra alle 7 fa min 4h)
+        const camMinEnd=Math.max(t2m(sh.ms),t2m('11:00')); // almeno apertura o 11:00
+        const camEndM=camMinEnd;
+        const camH=shiftH('07:00',m2t(camEndM));
+        // Se l'orario del negozio va oltre le 11 in mattinata, il turno camion
+        // si estende fino all'apertura normale (già coperta dalla fase coverPeriod)
+        sch.days[dayKey].shifts.push({employeeId:camEmp.id,startTime:'07:00',endTime:m2t(camEndM),areaId:magAreas[0].id,hours:camH});
+        worked[camEmp.id]=(worked[camEmp.id]||0)+camH;
+      }
+    }
+
+    // ore disponibili per un dipendente dato cursor
+    const empBudget=(emp,cursor)=>{
+      const base=empMaxH(emp)>0?empMaxH(emp)-(worked[emp.id]||0):9;
+      const ot=extraBudget[emp.id]||0;
+      return base+ot;
+    };
+
+    // calcola fine turno rispettando: ore rimaste, max consecutive, gap futuro, fine periodo
+    const calcRawEnd=(emp,cursor,pEndM)=>{
+      const remH=empBudget(emp,cursor);
+      const consec=consecHAt(emp.id,cursor,dayKey);
+      const maxConsecRem=Math.max(0,6-consec);
+      const nextFut=sch.days[dayKey].shifts
+        .filter(s=>s.employeeId===emp.id&&t2m(s.startTime)>cursor)
+        .sort((a,b)=>t2m(a.startTime)-t2m(b.startTime))[0];
+      const futureCap=nextFut?t2m(nextFut.startTime)-120:pEndM;
+      return Math.min(cursor+remH*60,cursor+maxConsecRem*60,futureCap,pEndM);
+    };
+
+    // ── HELPER: estendi l'ultimo turno di empId di questo giorno ──
+    // Usato quando il frammento disponibile è < MIN_SHIFT_M ma il dipendente
+    // ha già un turno: aggiungiamo le ore residue all'ultimo turno esistente
+    // anche se va in straordinario.
+    const extendLastShift=(emp,extraMinutes)=>{
+      if(extraMinutes<=0)return;
+      const empShifts=sch.days[dayKey].shifts
+        .filter(s=>s.employeeId===emp.id)
+        .sort((a,b)=>t2m(b.endTime)-t2m(a.endTime));
+      if(!empShifts.length)return;
+      const last=empShifts[0];
+      // Mai superare la chiusura del negozio né le 23:59
+      const dayCloseM=t2m(sh.ae);
+      const hardCap=Math.min(dayCloseM,23*60+59);
+      const currentEndM=t2m(last.endTime);
+      if(currentEndM>=hardCap)return;
+      // Rispetta il limite di 6h consecutive: calcola quanto dura già il turno
+      const shiftDurM=t2m(last.endTime)-t2m(last.startTime);
+      const maxExtM=Math.max(0,(6*60)-shiftDurM); // minuti aggiuntivi consentiti prima del cap 6h
+      const allowedExtra=Math.min(extraMinutes,hardCap-currentEndM,maxExtM>0?maxExtM:extraMinutes);
+      // Se il turno è già a 6h, non estendere (forza pausa)
+      if(shiftDurM>=6*60)return;
+      if(allowedExtra<=0)return;
+      const newEndM=currentEndM+allowedExtra;
+      const newEnd=m2t(newEndM);
+      const addedH=allowedExtra/60;
+      last.endTime=newEnd;
+      last.hours=(last.hours||0)+addedH;
+      worked[emp.id]=(worked[emp.id]||0)+addedH;
+      const base=empMaxH(emp);
+      if(base>0&&worked[emp.id]>base){
+        last.overtime=true;
+        const otAdded=Math.min(addedH,worked[emp.id]-base);
+        overtimeH[emp.id]=(overtimeH[emp.id]||0)+otAdded;
+      }
+    };
+
+    // ── b) COPERTURA AREE (area-first, cursor-based) ──
+    // Prima non-magazzino (obbligatorie), poi magazzino (sacrificabile)
+    const coverPeriod=(areaList,pStartT,pEndT)=>{
+      const covered=new Set();
+      const pEndM=t2m(pEndT);
+      // turno corrente (mattina/pomeriggio) e storico per l'alternanza
+      const curSlot=slotOf(dayKey,pStartT,pEndT);
+      const slotStats=computeSlotStats(dayIdx);
+
+      areaList.forEach(area=>{
+        const minReq=Math.max(1,area.minCoverage||1);
+        const areaMaxC=area.maxConcurrent||999;
+        const isProfArea=area.name.toLowerCase().includes('profumeria');
+        let cursor=t2m(pStartT);
+        let fullyCovered=true;
+
+        while(cursor<pEndM){
+          const _cursorSnapshot=cursor; // safety: se il cursor non avanza → break
+          const covering=sch.days[dayKey].shifts.filter(s=>
+            s.areaId===area.id&&t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor
+          );
+          if(covering.length>=minReq){
+            cursor=covering.reduce((mn,s)=>Math.min(mn,t2m(s.endTime)),pEndM);
+            continue;
+          }
+          if(covering.length>=areaMaxC){
+            cursor=covering.reduce((mn,s)=>Math.min(mn,t2m(s.endTime)),pEndM);
+            fullyCovered=false; break;
+          }
+          const concNow=sch.days[dayKey].shifts.filter(s=>
+            t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor
+          ).length;
+          if(S.maxConcurrentTotal&&concNow>=S.maxConcurrentTotal){
+            const nx=sch.days[dayKey].shifts
+              .filter(s=>t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor)
+              .reduce((mn,s)=>Math.min(mn,t2m(s.endTime)),pEndM);
+            fullyCovered=false;
+            if(nx>=pEndM)break;
+            cursor=nx;
+            continue;
+          }
+          const cands=working.filter(emp=>{
+            if(sch.days[dayKey].shifts.some(s=>
+              s.employeeId===emp.id&&t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor
+            ))return false;
+            if(consecHAt(emp.id,cursor,dayKey)>=6)return false;
+            return empBudget(emp,cursor)>MIN_SHIFT_M/60;
+          }).sort((a,b)=>{
+            const profA=(isProfArea&&a.isProfumeria)?10:0;
+            const profB=(isProfArea&&b.isProfumeria)?10:0;
+            if(profA!==profB)return profB-profA;
+            // Alternanza mattina/pomeriggio: chi ha già fatto molte volte questo turno
+            // (o l'ha fatto ieri) scende in coda; a parità vince chi ha più ore residue.
+            const scA=slotScore(slotStats,a,curSlot,dayIdx)-empBudget(a,cursor);
+            const scB=slotScore(slotStats,b,curSlot,dayIdx)-empBudget(b,cursor);
+            return scA-scB;
+          });
+
+          if(!cands.length){
+            // Nessun candidato con ≥2h disponibili.
+            // Prova a estendere chi ha già un turno oggi che finisce al cursor
+            const extCands=working.filter(emp=>
+              sch.days[dayKey].shifts.some(s=>s.employeeId===emp.id&&t2m(s.endTime)===cursor)
+            );
+            if(extCands.length>0){
+              const emp=extCands[0];
+              const extMin=pEndM-cursor; // estendi fino alla fine del periodo
+              if(extMin>0){extendLastShift(emp,extMin);cursor=pEndM;}
+            }
+            fullyCovered=false;break; // in ogni caso esci dal while
+          }
+
+          let assigned=false;
+          const prevCursor=cursor; // salva per rilevare cursor fermo
+          for(const emp of cands){
+            const rawEndM=calcRawEnd(emp,cursor,pEndM);
+            if(rawEndM<=cursor)continue; // calcRawEnd non avanza → salta
+            if(rawEndM-cursor<MIN_SHIFT_M){
+              // frammento troppo corto: estendi l'ultimo turno esistente
+              const hasShiftToday=sch.days[dayKey].shifts.some(s=>s.employeeId===emp.id);
+              if(hasShiftToday&&rawEndM>cursor){
+                extendLastShift(emp,rawEndM-cursor);
+                cursor=rawEndM;
+                assigned=true;
+              }
+              continue;
+            }
+            const sT=m2t(cursor),eT=m2t(rawEndM);
+            const actualH=shiftH(sT,eT);
+            const baseRem=empMaxH(emp)>0?empMaxH(emp)-(worked[emp.id]||0):actualH;
+            const isOT=baseRem<=0&&(extraBudget[emp.id]||0)>0;
+            sch.days[dayKey].shifts.push({employeeId:emp.id,startTime:sT,endTime:eT,areaId:area.id,hours:actualH,overtime:isOT||undefined});
+            worked[emp.id]=(worked[emp.id]||0)+actualH;
+            if(isOT)overtimeH[emp.id]=(overtimeH[emp.id]||0)+actualH;
+            if(isOT&&extraBudget[emp.id]){extraBudget[emp.id]=Math.max(0,extraBudget[emp.id]-actualH)}
+            cursor=rawEndM;
+            assigned=true;
+            break;
+          }
+          if(!assigned||cursor<=prevCursor){
+            // cursor non è avanzato: esci per evitare loop infinito
+            const nextRelease=sch.days[dayKey].shifts
+              .filter(s=>t2m(s.endTime)>cursor&&t2m(s.endTime)<pEndM)
+              .reduce((mn,s)=>Math.min(mn,t2m(s.endTime)),pEndM);
+            fullyCovered=false;
+            if(nextRelease>=pEndM||nextRelease<=cursor)break;
+            cursor=nextRelease;
+          }
+          if(cursor===_cursorSnapshot){fullyCovered=false;break;} // safety net
+        }
+        if(fullyCovered&&cursor>=pEndM)covered.add(area.id);
+      });
+      return covered;
+    };
+
+    // Ordine copertura: non-mag prima (obbligo), mag dopo (sacrificabile)
+    const orderedAreas=[...nonMagAreas,...magAreas];
+    const mornCov=coverPeriod(orderedAreas,sh.ms,isSplit?sh.me:sh.ae);
+    const aftnCov=isSplit?coverPeriod(orderedAreas,sh.as,sh.ae):new Set([...mornCov]);
+
+    // ── c) RIEMPIMENTO ORE CONTRATTUALI + STRAORDINARI ──
+    // Priorità 1 (regola nuova): prima riempi TUTTA la settimana assegnando ore a ogni giorno
+    // Questo fillHours completa il contratto di ogni dipendente nel giorno corrente
+    const fillHours=(pStartT,pEndT)=>{
+      const pStartM=t2m(pStartT),pEndM=t2m(pEndT);
+      const curSlotF=slotOf(dayKey,pStartT,pEndT);
+      const slotStatsF=computeSlotStats(dayIdx);
+      const sortedW=[...working].sort((a,b)=>{
+        // ore residue, corrette dalla penalità di alternanza mattina/pomeriggio
+        const rA=empBudget(a,pStartM)-slotScore(slotStatsF,a,curSlotF,dayIdx);
+        const rB=empBudget(b,pStartM)-slotScore(slotStatsF,b,curSlotF,dayIdx);
+        return rB-rA;
+      });
+      sortedW.forEach(emp=>{
+        const maxH=empMaxH(emp);
+        if(maxH<=0)return;
+        // ── CAP GIORNALIERO per distribuire le ore su tutta la settimana ──
+        // Conta i giorni lavorativi RIMANENTI (oggi incluso) in cui il dip. può lavorare:
+        // giorni aperti, non riposo, non ferie/assenza, da oggi in poi.
+        let remainingWorkDays=0;
+        const todayIdx=DAYS_KEY.indexOf(dayKey);
+        openDays.forEach(dk=>{
+          const dIdx=DAYS_KEY.indexOf(dk);
+          if(dIdx<todayIdx)return; // giorni passati nella settimana già processati
+          if(dk==='sun')return; // domenica gestita a parte
+          if(sch.days[dk].dayOff.includes(emp.id))return;
+          const dDate=isoDate(addDays(weekStart,dIdx));
+          if((emp.daysOff||[]).includes(dDate)||(emp.permissionDays||[]).includes(dDate)||isOnVacationDay(emp,dDate))return;
+          remainingWorkDays++;
+        });
+        const residualH=maxH-(worked[emp.id]||0);
+        // target giornaliero: distribuisce equamente le ore residue sui giorni rimanenti.
+        // Aggiunge un piccolo margine (1.15x) per assorbire arrotondamenti, ma cap a un turno pieno.
+        const dailyTarget=remainingWorkDays>0?Math.min(residualH/remainingWorkDays*1.15,residualH):residualH;
+        const workedTodayStart=DAYS_KEY.map(()=>0); // placeholder
+        let cursor=pStartM;
+        let _fillSafe=0; // safety counter anti-loop
+        while(cursor<pEndM){
+          if(++_fillSafe>2000)break; // max 2000 iterazioni per dipendente per periodo
+          // ore già assegnate oggi a questo dipendente
+          const todayH=sch.days[dayKey].shifts.filter(s=>s.employeeId===emp.id).reduce((s,x)=>s+(x.hours||0),0);
+          if(todayH>=dailyTarget-0.01)break; // raggiunto il target giornaliero: lascia ore per gli altri giorni
+          const totalBudget=Math.min(empBudget(emp,cursor),dailyTarget-todayH);
+          if(totalBudget<=MIN_SHIFT_M/60)break;
+          const act=sch.days[dayKey].shifts.find(s=>
+            s.employeeId===emp.id&&t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor
+          );
+          if(act){cursor=t2m(act.endTime);continue;}
+          const consec=consecHAt(emp.id,cursor,dayKey);
+          if(consec>=6){cursor=Math.min(cursor+120,pEndM);continue;}
+          const concNow=sch.days[dayKey].shifts.filter(s=>
+            t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor
+          ).length;
+          if(S.maxConcurrentTotal&&concNow>=S.maxConcurrentTotal){
+            const nx=sch.days[dayKey].shifts
+              .filter(s=>t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor)
+              .reduce((mn,s)=>Math.min(mn,t2m(s.endTime)),pEndM);
+            cursor=nx;continue;
+          }
+          const maxCR=Math.max(0,6-consec);
+          const nxFut=sch.days[dayKey].shifts
+            .filter(s=>s.employeeId===emp.id&&t2m(s.startTime)>cursor)
+            .sort((a,b)=>t2m(a.startTime)-t2m(b.startTime))[0];
+          const fCap=nxFut?t2m(nxFut.startTime)-120:pEndM;
+          const rawE=Math.round(Math.min(cursor+totalBudget*60,cursor+maxCR*60,fCap,pEndM));
+          if(rawE<=cursor){break;} // budget o consec azzerati: esci
+          if(rawE-cursor<MIN_SHIFT_M){
+            // frammento troppo corto per un nuovo turno
+            const hasShiftToday=sch.days[dayKey].shifts.some(s=>s.employeeId===emp.id);
+            if(hasShiftToday){
+              extendLastShift(emp,rawE-cursor);
+              cursor=rawE; // cursor avanza sempre
+              continue;
+            }
+            // nessun turno da estendere: salta al prossimo turno futuro o esci
+            if(nxFut&&t2m(nxFut.startTime)>cursor&&t2m(nxFut.startTime)<pEndM){
+              cursor=t2m(nxFut.startTime);
+            } else {break;}
+            continue;
+          }
+          // migliore area disponibile (non-mag prima)
+          const bestA=orderedAreas
+            .filter(a=>{
+              const mc=a.maxConcurrent||999;
+              const cc=sch.days[dayKey].shifts.filter(s=>
+                s.areaId===a.id&&t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor
+              ).length;
+              return cc<mc;
+            })
+            .sort((a,b)=>{
+              const ccA=sch.days[dayKey].shifts.filter(s=>s.areaId===a.id&&t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor).length;
+              const ccB=sch.days[dayKey].shifts.filter(s=>s.areaId===b.id&&t2m(s.startTime)<=cursor&&t2m(s.endTime)>cursor).length;
+              return ccA-ccB;
+            })[0];
+          if(!bestA){
+            const nx2=sch.days[dayKey].shifts
+              .filter(s=>t2m(s.endTime)>cursor&&t2m(s.endTime)<=pEndM)
+              .reduce((mn,s)=>Math.min(mn,t2m(s.endTime)),pEndM);
+            cursor=nx2;continue;
+          }
+          const sT=m2t(cursor),eT=m2t(rawE);
+          const actualH=shiftH(sT,eT);
+          const baseRem=empMaxH(emp)>0?empMaxH(emp)-(worked[emp.id]||0):actualH;
+          const isOT=baseRem<=0;
+          sch.days[dayKey].shifts.push({employeeId:emp.id,startTime:sT,endTime:eT,areaId:bestA.id,hours:actualH,overtime:isOT||undefined});
+          worked[emp.id]=(worked[emp.id]||0)+actualH;
+          if(isOT){overtimeH[emp.id]=(overtimeH[emp.id]||0)+actualH;if(extraBudget[emp.id])extraBudget[emp.id]=Math.max(0,extraBudget[emp.id]-actualH)}
+          cursor=rawE;
+        }
+      });
+    };
+
+    for(let _p=0;_p<4;_p++){
+      fillHours(sh.ms,isSplit?sh.me:sh.ae);
+      if(isSplit)fillHours(sh.as,sh.ae);
+    }
+
+    // ── d) DIRETTORE TAPPABUCHI ──
+    coverDirectorGaps();
+
+    // ── Avvisi copertura ──
+    // Non-mag sempre segnalate; mag segnalata solo se NESSUNA area è coperta
+    S.areas.forEach(a=>{
+      const isMag=isMagArea(a);
+      const covMorn=mornCov.has(a.id);
+      const covAftn=isSplit?aftnCov.has(a.id):covMorn;
+      if(isMag){
+        // sacrificabile: segnala solo se anche le altre aree hanno problemi
+        if(!covMorn&&!covAftn){
+          warnings.push(`${DAYS_FULL[dayIdx]} (${weekRange(weekStartISO)}): "${a.name}" non coperta (accettabile per carenza personale)`);
+        }
+      } else {
+        if(!covMorn&&!covAftn){
+          warnings.push(`⚠️ ${DAYS_FULL[dayIdx]} (${weekRange(weekStartISO)}): area "${a.name}" NON coperta — verificare disponibilità personale`);
+        } else if(isSplit&&(!covMorn||!covAftn)){
+          warnings.push(`${DAYS_FULL[dayIdx]} (${weekRange(weekStartISO)}): "${a.name}" scoperta nel ${!covMorn?'mattino':'pomeriggio'}`);
+        }
+      }
+    });
+  });
+
+  // ── PASSO 3: SATURAZIONE EQUA DELLE ORE CONTRATTUALI ──
+  // Priorità: riempire TUTTA la settimana saturando le ore contrattuali di OGNI dipendente
+  // prima di assegnare straordinari. Approccio round-robin: ad ogni ciclo serve il
+  // dipendente col maggior deficit, gli si aggiunge un blocco, poi si ricalcola.
+  // Questo evita che un dipendente vada in straordinario mentre altri restano in carenza.
+  const extendShiftTo=(dd,empId,newEndM)=>{
+    const myShifts=dd.shifts.filter(s=>s.employeeId===empId).sort((a,b)=>t2m(b.endTime)-t2m(a.endTime));
+    if(!myShifts.length)return 0;
+    const last=myShifts[0];
+    const oldEndM=t2m(last.endTime);
+    if(newEndM<=oldEndM)return 0;
+    const addedH=(newEndM-oldEndM)/60;
+    last.endTime=m2t(newEndM);
+    last.hours=(last.hours||0)+addedH;
+    return addedH;
+  };
+
+  // Prova ad aggiungere UN blocco di ore a un dipendente in UN giorno specifico.
+  // Ritorna ore aggiunte (0 se nulla). maxBlockH limita la dimensione del blocco
+  // per favorire la distribuzione su più giorni invece di saturare un giorno solo.
+  const tryAddBlock=(emp,dayKey,maxBlockH)=>{
+    if(dayKey==='sun')return 0;
+    const dd=sch.days[dayKey];
+    if(dd.dayOff.includes(emp.id))return 0;
+    const dayIdx2=DAYS_KEY.indexOf(dayKey);
+    const dayDate2=isoDate(addDays(weekStart,dayIdx2));
+    if((emp.daysOff||[]).includes(dayDate2)||(emp.permissionDays||[]).includes(dayDate2)||isOnVacationDay(emp,dayDate2))return 0;
+    const sh2=S.storeHours[dayKey];if(!sh2)return 0;
+    const dayClose=Math.min(t2m(sh2.ae),23*60+59);
+    const maxH=empMaxH(emp);
+    const residual=Math.max(0,maxH-(worked[emp.id]||0));
+    if(residual<=0.01)return 0;
+    const need=Math.round(Math.min(residual,maxBlockH)*60);
+    if(need<30)return 0;
+
+    // 1) estendi l'ultimo turno esistente del giorno (max 6h consecutive)
+    const myShifts=dd.shifts.filter(s=>s.employeeId===emp.id).sort((a,b)=>t2m(b.endTime)-t2m(a.endTime));
+    if(myShifts.length){
+      const last=myShifts[0];
+      const lastEndM=t2m(last.endTime);
+      const lastDurM=t2m(last.endTime)-t2m(last.startTime);
+      const consecRoom=Math.max(0,6*60-lastDurM);
+      const nextSh=dd.shifts.filter(s=>s.employeeId===emp.id&&t2m(s.startTime)>lastEndM).sort((a,b)=>t2m(a.startTime)-t2m(b.startTime))[0];
+      const capByNext=nextSh?t2m(nextSh.startTime)-lastEndM:(dayClose-lastEndM);
+      // non attraversare la pausa pranzo: se il negozio è split e il turno finisce
+      // entro la fine mattina, l'estensione si ferma a fine mattina (me)
+      let periodCapM=dayClose-lastEndM;
+      if(sh2.type==='split'&&lastEndM<=t2m(sh2.me)){periodCapM=t2m(sh2.me)-lastEndM;}
+      const room=Math.min(periodCapM,consecRoom,capByNext,need);
+      if(room>=30){
+        const addedH=extendShiftTo(dd,emp.id,lastEndM+room);
+        if(addedH>0){worked[emp.id]=(worked[emp.id]||0)+addedH;return addedH;}
+      }
+    }
+
+    // 2) aggiungi un nuovo turno in uno slot libero (rispetta pausa 2h, concorrenza)
+    const myDayShifts=dd.shifts.filter(s=>s.employeeId===emp.id).sort((a,b)=>t2m(a.startTime)-t2m(b.startTime));
+    // candidati di inizio: apertura mattina, inizio pomeriggio (se split),
+    // E il rientro dopo una pausa di 2h da ogni turno esistente del dipendente (per negozi continuati)
+    const startCandidates=sh2.type==='split'?[t2m(sh2.ms),t2m(sh2.as)]:[t2m(sh2.ms)];
+    myDayShifts.forEach(s=>{const after=t2m(s.endTime)+120;if(after<dayClose&&!startCandidates.includes(after))startCandidates.push(after);});
+    // Alternanza: prova per primo lo slot (mattina/pomeriggio) che il dipendente ha
+    // fatto meno volte in settimana, così le ore residue non finiscono sempre nello
+    // stesso momento della giornata.
+    const statsSat=computeSlotStats(dayIdx2);
+    const slotAtStart=stM=>slotOf(dayKey,m2t(stM),m2t(Math.min(stM+MIN_SHIFT_M,dayClose)));
+    startCandidates.sort((a,b)=>{
+      const sa=slotScore(statsSat,emp,slotAtStart(a),dayIdx2);
+      const sb=slotScore(statsSat,emp,slotAtStart(b),dayIdx2);
+      if(Math.abs(sa-sb)>0.01)return sa-sb;
+      return a-b;
+    });
+    for(const stM of startCandidates){
+      if(myDayShifts.some(s=>stM<t2m(s.endTime)&&(stM+MIN_SHIFT_M)>t2m(s.startTime)))continue;
+      if(myDayShifts.some(s=>t2m(s.endTime)<=stM&&stM-t2m(s.endTime)<120))continue;
+      // non iniziare un turno prima dell'apertura
+      if(stM<t2m(sh2.ms))continue;
+      const periodEnd=(sh2.type==='split'&&stM<t2m(sh2.me))?t2m(sh2.me):dayClose;
+      // Se il residuo è < MIN_SHIFT_M, usa il periodo intero (preferibile a lasciare carenza).
+      // Questo può generare al massimo un piccolo straordinario (< MIN_SHIFT_M).
+      const effectiveNeed=need<MIN_SHIFT_M?(periodEnd-stM):need;
+      const maxLen=Math.min(periodEnd-stM,6*60,effectiveNeed);
+      if(maxLen<MIN_SHIFT_M)continue; // rispetta sempre il turno minimo di 4h
+      if(S.maxConcurrentTotal){
+        const conc=dd.shifts.filter(s=>t2m(s.startTime)<=stM&&t2m(s.endTime)>stM).length;
+        if(conc>=S.maxConcurrentTotal)continue;
+      }
+      const endM=stM+maxLen;
+      const areaCnt={};S.areas.forEach(a=>{areaCnt[a.id]=dd.shifts.filter(s=>s.areaId===a.id).length});
+      let aId='';
+      if(emp.isProfumeria){const pA=S.areas.find(a=>a.name.toLowerCase().includes('profumeria'));if(pA)aId=pA.id}
+      if(!aId){const free=S.areas.find(a=>!areaCnt[a.id]);aId=free?free.id:(S.areas[0]||{id:''}).id}
+      const h=shiftH(m2t(stM),m2t(endM));
+      dd.shifts.push({employeeId:emp.id,startTime:m2t(stM),endTime:m2t(endM),areaId:aId,hours:h});
+      worked[emp.id]=(worked[emp.id]||0)+h;
+      return h;
+    }
+    return 0;
+  };
+
+  // FASE A — SATURAZIONE distribuita: round-robin sul dipendente più carente,
+  // un blocco alla volta, provando i giorni in ordine di minor carico già assegnato.
+  // I dipendenti che non possono ricevere ore vengono ESCLUSI, senza fermare gli altri.
+  const blocked=new Set();
+  let saturGuard=0;
+  while(saturGuard++<2000){
+    const under=flexEmps.filter(e=>empMaxH(e)>0&&!blocked.has(e.id)&&(worked[e.id]||0)<empMaxH(e)-0.25)
+      .sort((a,b)=>(empMaxH(b)-(worked[b.id]||0))-(empMaxH(a)-(worked[a.id]||0)));
+    if(!under.length)break;
+    const emp=under[0];
+    // ordina i giorni lavorativi per ore già assegnate a questo dip. (meno carico prima → distribuzione)
+    const dayLoad=k=>{const dd=sch.days[k];return dd?dd.shifts.filter(s=>s.employeeId===emp.id).reduce((s,x)=>s+(x.hours||0),0):99};
+    const daysSorted=openDays.filter(k=>k!=='sun').sort((a,b)=>dayLoad(a)-dayLoad(b));
+    let added=0;
+    for(const dayKey of daysSorted){
+      if((worked[emp.id]||0)>=empMaxH(emp)-0.25)break;
+      // blocco massimo ~4h per favorire la distribuzione ma consentire rientri pomeridiani pieni
+      added+=tryAddBlock(emp,dayKey,4);
+      if(added>0.01)break; // un blocco alla volta, poi ripassa il round-robin
+    }
+    if(added<=0.01)blocked.add(emp.id); // questo dip non può ricevere altro: escludilo, NON fermare il resto
+  }
+
+  // FASE A-bis — RECUPERO RESIDUI: giro finale aggressivo. Per ogni dipendente ancora
+  // sotto contratto, tenta di aggiungere ore in OGNI giorno con blocchi pieni (fino a 6h),
+  // senza vincolo di distribuzione. Recupera i frammenti residui.
+  let recoverGuard=0;
+  let recovering=true;
+  while(recovering&&recoverGuard++<2000){
+    recovering=false;
+    flexEmps.forEach(emp=>{
+      if(empMaxH(emp)<=0)return;
+      if((worked[emp.id]||0)>=empMaxH(emp)-0.25)return;
+      for(const dayKey of openDays.filter(k=>k!=='sun')){
+        if((worked[emp.id]||0)>=empMaxH(emp)-0.25)break;
+        const got=tryAddBlock(emp,dayKey,6);
+        if(got>0.01){recovering=true;}
+      }
+    });
+  }
+
+  // ── PASSO 4: DIRETTORE SOSTITUISCE GLI STRAORDINARI ECCESSIVI ──
+  // Se un dipendente flex ha più di 3h di straordinario, il direttore subentra
+  // in quei turni extra: riduce il turno del flex e si aggiunge lui per coprire.
+  // Rispetta le regole del direttore: max 3h/giorno aggiuntive, domenica libera,
+  // non sovrapposto ai suoi turni fissi.
+  const OT_THRESHOLD=3; // h di straordinario tollerato prima dell'intervento direttore
+  const MAX_DIR_DAY_MIN=180; // max 3h tappabuchi/giorno per il direttore
+
+  const directors=avail.filter(e=>e.isDirectore);
+  if(directors.length>0){
+    directors.forEach(dir=>{
+      // Per ogni dipendente flex con straordinario > soglia
+      flexEmps.forEach(emp=>{
+        const contract=empMaxH(emp);
+        if(contract<=0)return;
+        const totalWorked=worked[emp.id]||0;
+        const totalOT=totalWorked-contract;
+        if(totalOT<=OT_THRESHOLD+0.1)return; // sotto soglia, lascia stare
+        let otToReplace=totalOT-OT_THRESHOLD; // ore da trasferire al direttore
+
+        // Scorre i giorni con turni oltre il contratto (partendo da quello con più ore)
+        const dayTotals=openDays.filter(k=>k!=='sun').map(k=>{
+          const h=sch.days[k].shifts.filter(s=>s.employeeId===emp.id).reduce((s,x)=>s+(x.hours||0),0);
+          return {k,h};
+        }).filter(x=>x.h>0).sort((a,b)=>b.h-a.h); // più carico prima
+
+        for(const {k:dayKey} of dayTotals){
+          if(otToReplace<=0.1)break;
+          if(dayKey==='sun')continue;
+
+          // Quante ore NON-fisse ha già il direttore oggi?
+          // Conta sia i tappabuchi area-scoperta (coverDirectorGaps) sia quelli del PASSO 4.
+          // Il turno fisso viene escluso perché non conta nel limite 3h tappabuchi.
+          const dirFixedToday=sch.days[dayKey].shifts
+            .filter(s=>s.employeeId===dir.id&&!s.directorGap).reduce((s,x)=>s+(x.hours||0),0);
+          const dirTotalToday=sch.days[dayKey].shifts
+            .filter(s=>s.employeeId===dir.id).reduce((s,x)=>s+(x.hours||0),0);
+          const dirGapToday=dirTotalToday-dirFixedToday; // ore tappabuchi oggi
+          const dirRoomMin=MAX_DIR_DAY_MIN-dirGapToday*60;
+          if(dirRoomMin<30)continue; // direttore già pieno questo giorno
+
+          // Trova il turno più lungo del flex in quel giorno (quello extra-contratto)
+          const empShiftsDay=sch.days[dayKey].shifts
+            .filter(s=>s.employeeId===emp.id)
+            .sort((a,b)=>(b.hours||0)-(a.hours||0));
+          if(!empShiftsDay.length)continue;
+
+          for(const shift of empShiftsDay){
+            if(otToReplace<=0.1)break;
+            // Quanto possiamo tagliare da questo turno?
+            // Taglia dalla coda: riduce endTime del turno del flex
+            const shiftH=shift.hours||0;
+            const minKeep=Math.max(MIN_SHIFT_M/60,0.5); // lascia almeno 30min
+            const cuttable=shiftH-minKeep; // max tagliabile
+            if(cuttable<=0.1)continue;
+
+            // Quanto tagliamo: min(da-rimpiazzare, tagliabile, room-direttore)
+            const cut=Math.min(otToReplace,cuttable,dirRoomMin/60);
+            if(cut<0.25)continue;
+
+            // Controlla che il direttore non sia già in turno in quell'orario
+            const cutStartM=t2m(shift.endTime)-Math.round(cut*60);
+            const cutEndM=t2m(shift.endTime);
+            const dirBusy=sch.days[dayKey].shifts.some(s=>
+              s.employeeId===dir.id&&t2m(s.startTime)<cutEndM&&t2m(s.endTime)>cutStartM
+            );
+            if(dirBusy)continue;
+
+            // Esegui il taglio: accorcia il turno del flex
+            const oldEnd=shift.endTime;
+            shift.endTime=m2t(cutStartM);
+            shift.hours=(shift.hours||0)-cut;
+            worked[emp.id]=(worked[emp.id]||0)-cut;
+
+            // Assegna il blocco tagliato al direttore
+            const areaId=shift.areaId||(S.areas[0]||{id:''}).id;
+            sch.days[dayKey].shifts.push({
+              employeeId:dir.id,
+              startTime:m2t(cutStartM),
+              endTime:oldEnd,
+              areaId,
+              hours:cut,
+              directorGap:true
+            });
+            worked[dir.id]=(worked[dir.id]||0)+cut;
+            otToReplace-=cut;
+          }
+        }
+      });
+    });
+  }
+
+  // ── Avviso copertura profumeria (priorità 1) ──
+  if(avail.some(e=>e.isProfumeria)){
+    openDays.forEach(dk=>{
+      const covered=sch.days[dk].shifts.some(s=>{const e=getEmp(s.employeeId);return e&&e.isProfumeria});
+      if(!covered){
+        warnings.push(`🌸 ${DAYS_FULL[DAYS_KEY.indexOf(dk)]} (${weekRange(weekStartISO)}): giornata SENZA esperta profumeria — verificare riposi/ferie.`);
+      }
+    });
+  }
+
+  // ── Avviso turni poco variati (mattine/pomeriggi) ──
+  flexEmps.forEach(e=>{
+    const st=computeSlotStats(7)[e.id];
+    if(!st)return;
+    const tot=st.morning+st.afternoon;
+    if(tot>=4&&(st.morning===0||st.afternoon===0)){
+      warnings.push(`🔁 ${e.name} (${weekRange(weekStartISO)}): sempre ${st.afternoon===0?'di mattina':'di pomeriggio'} (${tot} giorni) — variazione non possibile con i vincoli attuali.`);
+    }
+  });
+
+  // ── Avvisi straordinari ──
+  flexEmps.forEach(e=>{
+    const ot=Math.round((overtimeH[e.id]||0)*10)/10;
+    if(ot>0){
+      warnings.push(`📌 STRAORDINARI — ${e.name}: +${ot}h questa settimana (ore extra per copertura negozio)`);
+    }
+  });
+
+  // ── Avviso ore mancanti ──
+  flexEmps.forEach(e=>{
+    const maxH=empMaxH(e); if(!maxH)return;
+    const workedWithOt=(worked[e.id]||0);
+    const contractual=Math.min(workedWithOt,maxH);
+    const missing=Math.round((maxH-contractual)*10)/10;
+    if(missing>0.5) warnings.push(`${weekRange(weekStartISO)}: ${e.name} — ${missing}h mancanti (${Math.round(contractual*10)/10}h su ${maxH}h contratto)`);
+  });
+
+  // Allega dati straordinari al risultato per visualizzazione
+  return {weekStart:weekStartISO,days:sch.days,worked,overtimeH};
+}
+
+/* ═══════════════ MULTI-WEEK GENERATION ═══════════════ */
+function generateSchedule(){
+  if(!S.currentWeekStart){toast('Seleziona prima una settimana');return}
+  if(!S.employees.length){toast('Nessun dipendente configurato — aggiungine almeno uno');return}
+  if(!S.areas.length){toast('Nessuna area configurata — aggiungine almeno una');return}
+  const openDaysCheck=DAYS_KEY.filter(k=>S.storeHours[k]&&S.storeHours[k].open);
+  if(!openDaysCheck.length){toast('Nessun giorno di apertura configurato — vai in "Orari Negozio"');return}
+  S.genWeekCount=parseInt(document.getElementById('numWeeks').value)||1;
+  if(S.weekSchedules&&S.weekSchedules.length>0){
+    openArchiveModal();
+  } else {
+    doGenerate();
+  }
+}
+
+function openArchiveModal(){
+  const first=S.weekSchedules[0];
+  const last=S.weekSchedules[S.weekSchedules.length-1];
+  const autoName=first?`Orario ${weekRange(first.weekStart)}${S.weekSchedules.length>1?' – '+weekRange(last.weekStart):''}`:('Orario '+new Date().toLocaleDateString('it-IT'));
+  openModal(`
+    <div class="modal-header"><div class="modal-title">📦 Gestione Orari Esistenti</div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="alert alert-info">Hai già <strong>${S.weekSchedules.length} settimana/e</strong> generate (${first?weekRange(first.weekStart):''}). Prima di generare i nuovi orari, puoi archiviarli per consultarli in futuro senza perderli.</div>
+      <div class="form-group mb-16">
+        <label class="form-label">Nome Archivio</label>
+        <input type="text" class="form-control" id="archiveName" value="${esc(autoName)}" placeholder="Es. Luglio-Agosto 2026">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Annulla</button>
+      <button class="btn btn-warning" onclick="closeModal();doGenerate()">Sostituisci senza archiviare</button>
+      <button class="btn btn-primary" onclick="archiveCurrentThenGenerate()">📦 Archivia e Genera Nuovi</button>
+    </div>`);
+}
+
+function archiveCurrentThenGenerate(){
+  const name=(document.getElementById('archiveName')?.value||'').trim()||('Orario '+new Date().toLocaleDateString('it-IT'));
+  S.archivedSchedules.push({id:uid(),name,createdAt:new Date().toISOString(),weekSchedules:S.weekSchedules});
+  S.weekSchedules=[];
+  closeModal();
+  doGenerate();
+  toast('Orari precedenti archiviati come "'+name+'"');
+}
+
+function doGenerate(){
+  const warnings=[];
+  const schedules=[];
+  const restHistory={}; // {empId: dayKey} — tracks last rest day for rotation
+  // Forza il lunedì come inizio settimana (settimana standard lun→dom)
+  const baseMonday=getMonday(new Date(S.currentWeekStart+'T00:00:00'));
+  S.currentWeekStart=isoDate(baseMonday);
+  for(let w=0;w<S.genWeekCount;w++){
+    const ws=addDays(baseMonday,w*7);
+    const weekSch=generateWeekSchedule(isoDate(ws),warnings,restHistory,w);
+    schedules.push(weekSch);
+    // Update restHistory: record which day each employee rested this week
+    DAYS_KEY.forEach(k=>{
+      if(!S.storeHours[k]||!S.storeHours[k].open)return;
+      (weekSch.days[k]&&weekSch.days[k].dayOff||[]).forEach(empId=>{restHistory[empId]=k});
+    });
+  }
+  S.weekSchedules=schedules;
+  S.currentViewWeekIdx=0;
+  S.currentViewSource='current';
+  save();
+  const wEl=document.getElementById('genWarnings');
+  if(warnings.length){
+    wEl.innerHTML=`<div class="alert alert-warning"><strong>⚠️ Avvertimenti (${warnings.length}):</strong><ul style="margin-top:6px;padding-left:18px;line-height:1.9">${warnings.map(w=>`<li>${w}</li>`).join('')}</ul></div>`;
+  } else {
+    wEl.innerHTML=`<div class="alert alert-success">✅ ${S.genWeekCount} settimana/e generate con successo.</div>`;
+  }
+  showGenPreview(0);
+  toast(`${S.genWeekCount} orario/i generato/i! Vai su "Orario Settimanale"`);
+}
+
+function showGenPreview(weekIdx){
+  const preview=document.getElementById('genPreview');
+  const tbody=document.getElementById('genPreviewBody');
+  const numEl=document.getElementById('genPreviewWeekNum');
+  const navEl=document.getElementById('genPreviewWeekNav');
+  preview.style.display='';
+
+  const sch=S.weekSchedules[weekIdx];
+  if(!sch){return}
+  numEl.textContent=(weekIdx+1)+' di '+S.weekSchedules.length+' — '+weekRange(sch.weekStart);
+
+  // Rebuild nav buttons
+  navEl.innerHTML=S.weekSchedules.map((_,i)=>`<button class="btn ${i===weekIdx?'btn-primary':'btn-secondary'} btn-sm" onclick="showGenPreview(${i})">${i+1}</button>`).join('');
+
+  // Recalculate worked hours and overtime from schedule
+  const worked={};
+  const overtimeH={};
+  S.employees.forEach(e=>{worked[e.id]=0;overtimeH[e.id]=0});
+  DAYS_KEY.forEach(k=>{
+    if(sch.days[k]){
+      sch.days[k].shifts.forEach(s=>{
+        worked[s.employeeId]=(worked[s.employeeId]||0)+s.hours;
+        if(s.overtime)overtimeH[s.employeeId]=(overtimeH[s.employeeId]||0)+s.hours;
+      });
+    }
+  });
+
+  const ws=sch.weekStart;
+  tbody.innerHTML=S.employees.map(emp=>{
+    if(isOnVacation(emp,ws))return `<tr><td><strong>${esc(emp.name)}</strong></td><td colspan="4"><span class="badge b-yellow">🏖 Ferie intera settimana</span></td></tr>`;
+    const max=empMaxH(emp);
+    const w=Math.round((worked[emp.id]||0)*10)/10;
+    const pct=max>0?Math.min((w/max)*100,100):0;
+    const over=max>0&&w>max;
+    const full=!over&&max>0&&pct>=99.5;
+    const near=!over&&!full&&pct>85;
+    const ot=Math.round((overtimeH[emp.id]||0)*10)/10;
+    let restDay='—';
+    DAYS_KEY.forEach((k,i)=>{if(sch.days[k]&&sch.days[k].dayOff.includes(emp.id)){restDay=DAYS_FULL[i]+((!S.storeHours[k]||!S.storeHours[k].open)?' (chiusura)':'');}});
+    return `<tr>
+      <td><strong>${esc(emp.name)}</strong></td>
+      <td>${max>0?max+'h':'Fisso'}</td>
+      <td>${Math.min(w,max>0?max:w).toFixed(1)}h<div class="hrs-bar"><div class="hrs-fill ${over?'over':near?'near':''}" style="width:${pct}%"></div></div></td>
+      <td>${ot>0?`<span class="badge b-orange">+${ot}h straord.</span>`:'<span class="text-muted text-xs">—</span>'}</td>
+      <td>${over?'<span class="badge b-red">Ore eccedute</span>':full?'<span class="badge b-green">✓ Pieno</span>':near?'<span class="badge b-yellow">Quasi pieno</span>':'<span class="badge b-green">✓ OK</span>'}</td>
+      <td>${restDay}</td>
+    </tr>`;
+  }).join('');
+}
+
+/* ═══════════════ CHECK ORARI ═══════════════ */
+// Calcola, per la settimana attualmente visualizzata, le ore effettive di ogni
+// dipendente confrontandole con il contratto: ore usate, straordinari, carenze.
+// Riflette eventuali modifiche manuali fatte sull'orario settimanale.
+// Calcola, per ogni giorno aperto e per ogni area, le fasce orarie NON coperte da
+// alcun turno (di qualsiasi dipendente, inclusi straordinari/copertura direttore/domenica)
+// durante l'orario di apertura del negozio di quel giorno.
+function computeAreaCoverageGaps(sch){
+  const result=[];
+  DAYS_KEY.forEach((dayKey,dayIdx)=>{
+    const sh=S.storeHours[dayKey];
+    if(!sh||!sh.open)return; // giorno chiuso: nessuna copertura richiesta
+    const periods=sh.type==='split'?[[t2m(sh.ms),t2m(sh.me)],[t2m(sh.as),t2m(sh.ae)]]:[[t2m(sh.ms),t2m(sh.ae)]];
+    const dayData=sch.days[dayKey];
+    const dayShifts=(dayData&&dayData.shifts)||[];
+    S.areas.forEach(area=>{
+      // Intervalli coperti da QUALSIASI turno assegnato a quest'area, quel giorno
+      const raw=dayShifts.filter(s=>s.areaId===area.id).map(s=>[t2m(s.startTime),t2m(s.endTime)]).sort((a,b)=>a[0]-b[0]);
+      const merged=[];
+      raw.forEach(([s,e])=>{
+        if(merged.length&&s<=merged[merged.length-1][1]){
+          merged[merged.length-1][1]=Math.max(merged[merged.length-1][1],e);
+        } else merged.push([s,e]);
+      });
+      const periodsOut=periods.map(([pS,pE])=>{
+        if(pE<=pS)return {pS,pE,segments:[],gaps:[]};
+        const segments=[];
+        let cursor=pS;
+        merged.forEach(([ms,me])=>{
+          if(me<=pS||ms>=pE)return;
+          const s=Math.max(ms,pS), e=Math.min(me,pE);
+          if(s>cursor)segments.push({s:cursor,e:s,covered:false});
+          if(e>s)segments.push({s,e,covered:true});
+          cursor=Math.max(cursor,e);
+        });
+        if(cursor<pE)segments.push({s:cursor,e:pE,covered:false});
+        const gaps=segments.filter(x=>!x.covered&&x.e>x.s);
+        return {pS,pE,segments,gaps};
+      });
+      const totalGapMin=periodsOut.reduce((s,p)=>s+p.gaps.reduce((s2,g)=>s2+(g.e-g.s),0),0);
+      result.push({dayKey,dayIdx,area,periods:periodsOut,totalGapMin});
+    });
+  });
+  return result;
+}
+
+// Chiude il modal, salta alla colonna del giorno indicato nell'orario e la evidenzia
+// per qualche secondo — permette di intervenire subito su una fascia scoperta.
+function jumpToDay(dayKey){
+  closeModal();
+  setTimeout(()=>{
+    const cells=document.querySelectorAll(`[data-day="${dayKey}"]`);
+    if(!cells.length)return;
+    cells[0].scrollIntoView({behavior:'smooth',block:'center',inline:'center'});
+    cells.forEach(el=>{
+      el.classList.add('day-highlight');
+      setTimeout(()=>el.classList.remove('day-highlight'),2800);
+    });
+  },80);
+}
+function switchCheckOrariTab(tab){
+  const h=document.getElementById('coTabHours'),c=document.getElementById('coTabCoverage');
+  const bh=document.getElementById('coBtnHours'),bc=document.getElementById('coBtnCoverage');
+  if(h)h.style.display=tab==='hours'?'':'none';
+  if(c)c.style.display=tab==='coverage'?'':'none';
+  if(bh)bh.classList.toggle('active',tab==='hours');
+  if(bc)bc.classList.toggle('active',tab==='coverage');
+}
+
+function openCheckOrari(){
+  if(!S.weekSchedules.length){toast('Nessun orario generato');return}
+  if(S.currentViewSource!=='current'){toast('Disponibile solo sull\'orario corrente');return}
+  const idx=Math.min(S.currentViewWeekIdx,S.weekSchedules.length-1);
+  const sch=S.weekSchedules[idx];
+  const ws=new Date(sch.weekStart+'T00:00:00');
+
+  const rows=S.employees.map(emp=>{
+    // somma ore effettive dai turni di questa settimana
+    let totH=0;
+    DAYS_KEY.forEach((k,i)=>{
+      const dd=sch.days[k];if(!dd)return;
+      const dayShifts=(dd.shifts||[]).filter(s=>s.employeeId===emp.id);
+      dayShifts.forEach(s=>{totH+=s.hours||shiftH(s.startTime,s.endTime)});
+    });
+    totH=Math.round(totH*10)/10;
+    const contract=empMaxH(emp); // 0 = orario fisso
+
+    // Conta giorni aperti e giorni di ferie in questa settimana
+    const openDaysIdx=DAYS_KEY.map((k,i)=>({k,i})).filter(({k})=>S.storeHours[k]&&S.storeHours[k].open);
+    const vacDays=openDaysIdx.filter(({i})=>isOnVacationDay(emp,isoDate(addDays(ws,i)))).length;
+    const totalOpenDays=openDaysIdx.length;
+    const fullVacation=totalOpenDays>0&&vacDays>=totalOpenDays;
+    const partialVacation=vacDays>0&&vacDays<totalOpenDays;
+
+    let status,statusColor,extra='',effectiveContract=contract;
+
+    if(fullVacation){
+      status='🏖 In ferie';statusColor='#C0392B';extra='ferie intera settimana';
+      return {emp,totH,contract,effectiveContract:0,status,statusColor,extra,isVacation:true};
+    }
+
+    if(contract<=0){
+      status='Orario fisso';statusColor='#5D6D7E';extra=`${totH}h assegnate`;
+      return {emp,totH,contract,effectiveContract:0,status,statusColor,extra};
+    }
+
+    // Ferie parziale: riduci il contratto in proporzione ai giorni lavorabili
+    if(partialVacation&&totalOpenDays>0){
+      effectiveContract=Math.round((contract*(totalOpenDays-vacDays)/totalOpenDays)*10)/10;
+    }
+
+    const diff=Math.round((totH-effectiveContract)*10)/10;
+    if(diff>0.05){status=`+${diff}h straordinario`;statusColor='#E67E22';extra=partialVacation?`oltre contratto ridotto (${vacDays}gg ferie)`:'🔶 oltre contratto'}
+    else if(diff<-0.05){status=`${Math.abs(diff)}h in meno`;statusColor='#C0392B';extra=partialVacation?`carenza su contratto ridotto (${vacDays}gg ferie)`:'🔻 carenza'}
+    else{status='✓ Completo';statusColor='#1E8449';extra=partialVacation?`completo (${vacDays}gg ferie, contratto ${effectiveContract}h)`:'in linea col contratto'}
+    return {emp,totH,contract,effectiveContract,status,statusColor,extra,partialVacation,vacDays};
+  });
+
+  const tableRows=rows.map(r=>{
+    const contractLbl=r.isVacation?'<span style="color:#C0392B">Ferie</span>':(r.contract>0?(r.partialVacation?`${r.contract}h → ${r.effectiveContract}h`:`${r.contract}h`):'Fisso');
+    const cmpContract=r.effectiveContract>0?r.effectiveContract:r.contract;
+    const pct=cmpContract>0?Math.min((r.totH/cmpContract)*100,150):0;
+    const barColor=r.totH>cmpContract?'#E67E22':(r.totH<cmpContract*0.99?'#C0392B':'#1E8449');
+    return `<tr>
+      <td><strong>${esc(r.emp.name)}</strong></td>
+      <td>${contractLbl}</td>
+      <td><strong>${r.totH}h</strong>${cmpContract>0&&!r.isVacation?`<div class="hrs-bar" style="margin-top:3px"><div class="hrs-fill" style="width:${Math.min(pct,100)}%;background:${barColor}"></div></div>`:''}</td>
+      <td><span style="color:${r.statusColor};font-weight:700;font-size:12px">${r.status}</span></td>
+      <td class="text-xs text-muted">${r.extra}</td>
+    </tr>`;
+  }).join('');
+
+  // Totali aggregati (escludendo chi è in ferie intera settimana)
+  const totalOT=rows.reduce((s,r)=>{const cmp=r.effectiveContract>0?r.effectiveContract:r.contract;return s+(!r.isVacation&&cmp>0&&r.totH>cmp?(r.totH-cmp):0)},0);
+  const totalDeficit=rows.reduce((s,r)=>{const cmp=r.effectiveContract>0?r.effectiveContract:r.contract;return s+(!r.isVacation&&cmp>0&&r.totH<cmp?(cmp-r.totH):0)},0);
+  const totalWorked=rows.reduce((s,r)=>s+r.totH,0);
+
+  // ── PROSPETTO 2: COPERTURA AREE ──
+  const coverage=computeAreaCoverageGaps(sch);
+  const flatGaps=[];
+  coverage.forEach(c=>{c.periods.forEach(p=>{p.gaps.forEach(g=>{flatGaps.push({dayKey:c.dayKey,dayIdx:c.dayIdx,area:c.area,s:g.s,e:g.e})})})});
+  flatGaps.sort((a,b)=>a.dayIdx-b.dayIdx||a.s-b.s);
+  const totalGapH=Math.round(flatGaps.reduce((s,g)=>s+(g.e-g.s),0)/6)/10;
+
+  const quickListHtml=flatGaps.length?flatGaps.map(g=>
+    `<span class="gap-chip" onclick="jumpToDay('${g.dayKey}')">⚠️ ${DAYS_FULL[g.dayIdx]} ${fmtShort(addDays(ws,g.dayIdx))} · ${esc(g.area.name)} · ${m2t(g.s)}–${m2t(g.e)} <span style="opacity:.75">🔧 vai</span></span>`
+  ).join(''):`<div class="alert" style="background:#EAFAF1;border-color:#A9DFBF;color:#1E8449;font-weight:600">✓ Nessuna fascia scoperta questa settimana — tutte le aree sono coperte durante l'orario di apertura.</div>`;
+
+  const dayCardsHtml=DAYS_KEY.map((dayKey,dayIdx)=>{
+    const sh0=S.storeHours[dayKey];
+    if(!sh0||!sh0.open)return '';
+    const dayAreas=coverage.filter(c=>c.dayKey===dayKey);
+    const dayHasGaps=dayAreas.some(c=>c.totalGapMin>0);
+    const areaRows=dayAreas.map(c=>{
+      const barsHtml=c.periods.map(p=>{
+        const totalLen=p.pE-p.pS;
+        if(totalLen<=0)return '';
+        const segHtml=p.segments.map(seg=>{
+          const w=((seg.e-seg.s)/totalLen*100).toFixed(2);
+          const cls=seg.covered?'cov-seg-ok':'cov-seg-gap';
+          const clickAttr=seg.covered?'':` onclick="jumpToDay('${dayKey}')"`;
+          return `<div class="${cls}" style="width:${w}%" title="${m2t(seg.s)}–${m2t(seg.e)} ${seg.covered?'coperta':'SCOPERTA — clicca per intervenire'}"${clickAttr}></div>`;
+        }).join('');
+        return `<div><div class="cov-bar">${segHtml}</div><div class="cov-times"><span>${m2t(p.pS)}</span><span>${m2t(p.pE)}</span></div></div>`;
+      }).join('');
+      const gapList=c.periods.flatMap(p=>p.gaps).map(g=>`<span class="gap-chip" onclick="jumpToDay('${dayKey}')">${m2t(g.s)}–${m2t(g.e)} 🔧</span>`).join('');
+      return `<tr>
+        <td style="white-space:nowrap;vertical-align:top;padding-top:8px"><span style="width:10px;height:10px;background:${c.area.color};border-radius:2px;display:inline-block;margin-right:5px"></span>${esc(c.area.name)}</td>
+        <td style="min-width:220px">${barsHtml}</td>
+        <td style="min-width:130px;vertical-align:top;padding-top:6px">${gapList||'<span style="color:#1E8449;font-size:11px">✓ coperta</span>'}</td>
+      </tr>`;
+    }).join('');
+    return `<div style="margin-bottom:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
+      <div style="background:${dayHasGaps?'#FDEDEC':'#EAFAF1'};padding:8px 12px;font-weight:700;font-size:13px;display:flex;justify-content:space-between;align-items:center">
+        <span>${DAYS_FULL[dayIdx]} ${fmtShort(addDays(ws,dayIdx))}</span>
+        ${dayHasGaps?'<span style="font-size:11px;color:#C0392B">⚠️ fasce scoperte</span>':'<span style="font-size:11px;color:#1E8449">✓ tutto coperto</span>'}
+      </div>
+      <table style="width:100%;border-collapse:collapse"><tbody>${areaRows}</tbody></table>
+    </div>`;
+  }).join('');
+
+  openModal(`
+    <div class="modal-header"><div class="modal-title">📊 Check Orari — Sett. ${idx+1} (${weekRange(sch.weekStart)})</div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button class="co-tab-btn active" id="coBtnHours" onclick="switchCheckOrariTab('hours')">👥 Ore Dipendenti</button>
+        <button class="co-tab-btn" id="coBtnCoverage" onclick="switchCheckOrariTab('coverage')">🗺️ Copertura Aree${flatGaps.length?` <span style="background:#E74C3C;color:#fff;border-radius:8px;padding:0 6px;font-size:10px;margin-left:2px">${flatGaps.length}</span>`:''}</button>
+      </div>
+
+      <div id="coTabHours">
+        <div class="alert alert-info" style="margin-bottom:14px">Calcolo basato sull'orario attuale, incluse le modifiche manuali. Le ore sono la somma effettiva dei turni assegnati questa settimana.</div>
+        <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+          <div style="flex:1;min-width:120px;background:#F4F6F7;border-radius:6px;padding:10px;text-align:center">
+            <div style="font-size:20px;font-weight:700;color:var(--primary)">${Math.round(totalWorked*10)/10}h</div>
+            <div style="font-size:11px;color:var(--muted)">Ore totali assegnate</div>
+          </div>
+          <div style="flex:1;min-width:120px;background:#FEF0E0;border-radius:6px;padding:10px;text-align:center">
+            <div style="font-size:20px;font-weight:700;color:#E67E22">${Math.round(totalOT*10)/10}h</div>
+            <div style="font-size:11px;color:var(--muted)">Straordinari totali</div>
+          </div>
+          <div style="flex:1;min-width:120px;background:#FDEDEC;border-radius:6px;padding:10px;text-align:center">
+            <div style="font-size:20px;font-weight:700;color:#C0392B">${Math.round(totalDeficit*10)/10}h</div>
+            <div style="font-size:11px;color:var(--muted)">Carenze totali</div>
+          </div>
+        </div>
+        <table>
+          <thead><tr><th>Dipendente</th><th>Contratto</th><th>Ore Assegnate</th><th>Stato</th><th>Note</th></tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>
+
+      <div id="coTabCoverage" style="display:none">
+        <div class="alert alert-info" style="margin-bottom:14px">Fasce orarie in cui nessun dipendente risulta assegnato a un'area, durante l'orario di apertura del negozio. Clicca su una fascia scoperta (barra rossa tratteggiata o etichetta 🔧) per saltare direttamente a quel giorno nell'orario e correggerlo.</div>
+        <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
+          <div style="flex:1;min-width:120px;background:${flatGaps.length?'#FDEDEC':'#EAFAF1'};border-radius:6px;padding:10px;text-align:center">
+            <div style="font-size:20px;font-weight:700;color:${flatGaps.length?'#C0392B':'#1E8449'}">${totalGapH}h</div>
+            <div style="font-size:11px;color:var(--muted)">Ore scoperte totali</div>
+          </div>
+          <div style="flex:1;min-width:120px;background:#F4F6F7;border-radius:6px;padding:10px;text-align:center">
+            <div style="font-size:20px;font-weight:700;color:var(--primary)">${flatGaps.length}</div>
+            <div style="font-size:11px;color:var(--muted)">Fasce scoperte</div>
+          </div>
+        </div>
+        <div style="margin-bottom:16px">${quickListHtml}</div>
+        <div class="divider" style="margin-bottom:14px"></div>
+        ${dayCardsHtml}
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeModal()">Chiudi</button>
+    </div>`,true);
+}
+
+function clearSchedule(){
+  confirm2('Cancellare tutti gli orari correnti?','Gli archivi salvati non vengono toccati.',()=>{
+    S.weekSchedules=[];S.currentViewWeekIdx=0;S.currentViewSource='current';save();
+    document.getElementById('genWarnings').innerHTML='';
+    document.getElementById('genPreview').style.display='none';
+    renderSchedule();toast('Orari correnti cancellati');
+  });
+}
+
+/* ═══════════════ RENDER WEEKLY SCHEDULE ═══════════════ */
+function renderSchedule(){
+  const el=document.getElementById('schContent');
+  const title=document.getElementById('schTitle');
+  const mwBar=document.getElementById('mwBar');
+  const emergBtn=document.getElementById('emergencyBtn');
+  const checkBtn=document.getElementById('checkOrariBtn');
+  const archiveBar=document.getElementById('archiveBar');
+  const archiveSelect=document.getElementById('archiveSelect');
+  const deleteArchBtn=document.getElementById('deleteArchiveBtn');
+  const archiveRO=document.getElementById('archiveReadonly');
+
+  const hasArchives=S.archivedSchedules&&S.archivedSchedules.length>0;
+  const hasCurrent=S.weekSchedules&&S.weekSchedules.length>0;
+
+  // Build archive selector options
+  if(hasArchives||hasCurrent){
+    archiveBar.style.display='flex';
+    archiveSelect.innerHTML=
+      (hasCurrent?`<option value="current" ${S.currentViewSource==='current'?'selected':''}>📅 Orario Corrente (${S.weekSchedules.length} sett.)</option>`:'<option value="current" disabled>Nessun orario corrente</option>')+
+      (S.archivedSchedules||[]).map(a=>`<option value="${a.id}" ${S.currentViewSource===a.id?'selected':''}>📦 ${esc(a.name)} (${a.weekSchedules.length} sett.)</option>`).join('');
+    const isArchive=S.currentViewSource!=='current';
+    deleteArchBtn.style.display=isArchive?'':'none';
+    archiveRO.style.display=isArchive?'':'none';
+  } else {
+    archiveBar.style.display='none';
+  }
+
+  // Determine which schedule set to display
+  let weekSchedules, isReadOnly=false;
+  if(S.currentViewSource==='current'){
+    weekSchedules=S.weekSchedules;isReadOnly=false;
+  } else {
+    const arch=(S.archivedSchedules||[]).find(a=>a.id===S.currentViewSource);
+    weekSchedules=arch?arch.weekSchedules:[];isReadOnly=true;
+  }
+
+  if(!weekSchedules||!weekSchedules.length){
+    el.innerHTML=`<div class="empty"><div class="empty-icon">📅</div><div class="empty-text">Nessun orario generato</div><div class="empty-sub">Vai in "Genera Orario" per creare l'orario settimanale</div></div>`;
+    mwBar.style.display='none';emergBtn.style.display='none';if(checkBtn)checkBtn.style.display='none';return;
+  }
+
+  emergBtn.style.display=isReadOnly?'none':'';
+  if(checkBtn)checkBtn.style.display='';
+
+  const idx=Math.min(S.currentViewWeekIdx,weekSchedules.length-1);
+  if(S.currentViewSource==='current')S.currentViewWeekIdx=idx;
+  const sch=weekSchedules[idx];
+  const archLabel=isReadOnly?' 📦 ARCHIVIO':'';
+  title.textContent=`Orario Settimanale${archLabel} — Sett. ${idx+1}/${weekSchedules.length} — ${weekRange(sch.weekStart)}`;
+
+  // Multi-week tab bar
+  if(weekSchedules.length>1){
+    mwBar.style.display='flex';
+    mwBar.innerHTML=`<span class="text-xs fw-700 text-muted" style="margin-right:4px">SETTIMANA:</span>`+
+      weekSchedules.map((w,i)=>`<button class="mw-week-btn ${i===idx?'active':''}" onclick="viewWeek(${i})">${i+1} <span style="font-size:10px;font-weight:400">${fmtShort(new Date(w.weekStart+'T00:00:00'))}</span></button>`).join('')+
+      `<div class="mw-info">${isReadOnly?'📖 Archivio — sola lettura':'Clicca sulle celle per modificare i turni'}</div>`;
+  } else {
+    mwBar.style.display='none';
+  }
+
+  const emps=S.employees;
+  if(!emps.length){el.innerHTML=`<div class="empty"><div class="empty-text">Nessun dipendente</div></div>`;return}
+
+  const ws=new Date(sch.weekStart+'T00:00:00');
+  let html=`<div class="sch-grid"><table class="sch-table"><thead><tr><th class="emp-col">Dipendente</th>`;
+
+  DAYS_KEY.forEach((key,i)=>{
+    const sh=S.storeHours[key];const closed=!sh||!sh.open;
+    html+=`<th data-day="${key}" style="${closed?'opacity:.45':''}"><div>${DAYS_SHORT[i]}</div><div style="font-size:10px;font-weight:400">${fmtShort(addDays(ws,i))}</div>${closed?'<div style="font-size:9px">CHIUSO</div>':''}</th>`;
+  });
+  html+=`</tr></thead><tbody>`;
+
+  emps.forEach(emp=>{
+    const onVacWeek=isOnVacation(emp,sch.weekStart); // in ferie TUTTA la settimana
+    html+=`<tr><td class="emp-cell">
+      <div class="emp-name">${esc(emp.name)}</div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">${empMaxH(emp)>0?empMaxH(emp)+'h/sett':'Orario fisso'}</div>
+      ${onVacWeek?'<span class="badge b-red" style="font-size:9px;margin-top:3px">🏖 Ferie</span>':''}
+    </td>`;
+
+    DAYS_KEY.forEach((key,i)=>{
+      const sh=S.storeHours[key];const closed=!sh||!sh.open;
+      const dayDate=isoDate(addDays(ws,i));
+      const dayData=sch.days[key];
+      const onVacDay=isOnVacationDay(emp,dayDate); // ferie QUEL giorno
+
+      if(closed){html+=`<td data-day="${key}"><div class="day-cell is-closed"><span style="font-size:10px;color:#ADB5BD">Chiuso</span></div></td>`;return}
+      if(!dayData){html+=`<td data-day="${key}"><div class="day-cell"></div></td>`;return}
+
+      const isOff=dayData.dayOff&&dayData.dayOff.includes(emp.id);
+      const isAbs=(emp.daysOff||[]).includes(dayDate);
+      const isPerm=(emp.permissionDays||[]).includes(dayDate);
+      const shifts=dayData.shifts.filter(s=>s.employeeId===emp.id);
+
+      const clickFn=isReadOnly?'':`onclick="editShiftCell('${emp.id}','${key}',${idx})"`;
+      const cursor=isReadOnly?'cursor:default':'';
+
+      // Ferie: cliccabile per correzione manuale (mostra turni se ce ne sono dopo modifica manuale)
+      if(onVacDay&&!shifts.length){html+=`<td data-day="${key}"><div class="day-cell is-vacation" ${clickFn} style="${cursor}"><span class="cell-lbl" style="color:#922B21">FERIE</span></div></td>`;return}
+      if(isAbs&&!shifts.length){html+=`<td data-day="${key}"><div class="day-cell is-absence" ${clickFn} style="${cursor}"><span class="cell-lbl" style="color:#721C24">Assenza</span></div></td>`;return}
+      if(isPerm&&!shifts.length){html+=`<td data-day="${key}"><div class="day-cell is-perm" ${clickFn} style="${cursor}"><span class="cell-lbl" style="color:#0C5460">Permesso</span></div></td>`;return}
+      if(isOff&&!shifts.length){html+=`<td data-day="${key}"><div class="day-cell is-dayoff" ${clickFn} style="${cursor}"><span class="cell-lbl" style="color:#856404">Riposo</span></div></td>`;return}
+
+      if(!shifts.length){
+        html+=`<td data-day="${key}"><div class="day-cell" ${clickFn} style="${cursor}">${isReadOnly?'':' <div class="add-shift">+ Aggiungi</div>'}</div></td>`;
+        return;
+      }
+
+      const shiftsHtml=shifts.map(s=>{
+        const area=getArea(s.areaId);const color=area?area.color:'#3498DB';
+        const otBadge=s.overtime?'<div class="badge-ot">📌 STRAORDINARIO</div>':'';
+        const sunBadge=s.sundayFull?'<div class="badge-ot" style="background:#D6EAF8;color:#1B4F72">☀️ Turno domenica</div>':'';
+        const gapBadge=s.directorGap?'<div class="badge-ot" style="background:#E8DAEF;color:#5B2C6F">🔧 Copertura direttore</div>':'';
+        const prefBadge=s.preferred?'<div class="badge-ot" style="background:#FCF3CF;color:#7D6608">⭐ Preferenza</div>':'';
+        return `<div class="shift-chip ${s.overtime?'overtime':''}" style="border-left-color:${color}"><div class="shift-time">${s.startTime}–${s.endTime}</div><div class="shift-area">${area?esc(area.name):'—'}</div>${otBadge}${sunBadge}${gapBadge}${prefBadge}</div>`;
+      }).join('');
+
+      html+=`<td data-day="${key}"><div class="day-cell" ${clickFn} style="${cursor}" ${!isReadOnly?'title="Clicca per modificare"':''}>${shiftsHtml}</div></td>`;
+    });
+    html+=`</tr>`;
+  });
+
+  html+=`</tbody></table></div>`;
+  html+=`<div class="legend"><span class="text-xs fw-700 text-muted">AREE:</span>
+    ${S.areas.map(a=>`<span class="legend-item"><span style="width:12px;height:12px;background:${a.color};border-radius:2px;display:inline-block"></span>${esc(a.name)}</span>`).join('')}
+    <span class="legend-item"><span style="width:12px;height:12px;background:#FFFBF0;border:1px solid #FFEEBA;border-radius:2px;display:inline-block"></span>Riposo</span>
+    <span class="legend-item"><span style="width:12px;height:12px;background:#FEF0F0;border:1px solid #F5C6CB;border-radius:2px;display:inline-block"></span>Assenza</span>
+    <span class="legend-item"><span style="width:12px;height:12px;background:#FFF5F5;border:1px solid #FADBD8;border-radius:2px;display:inline-block"></span>Ferie</span>
+  </div>`;
+
+  el.innerHTML=html;
+}
+
+function viewWeek(idx){
+  S.currentViewWeekIdx=idx;save();renderSchedule();
+  if(S.currentViewSource==='current')showGenPreview(idx);
+}
+
+function switchScheduleSource(val){
+  S.currentViewSource=val;
+  S.currentViewWeekIdx=0;
+  save();renderSchedule();
+}
+
+function deleteCurrentArchive(){
+  const arch=(S.archivedSchedules||[]).find(a=>a.id===S.currentViewSource);
+  if(!arch)return;
+  confirm2(`Eliminare archivio "${arch.name}"?`,'Non recuperabile.',()=>{
+    S.archivedSchedules=S.archivedSchedules.filter(a=>a.id!==S.currentViewSource);
+    S.currentViewSource='current';
+    save();renderSchedule();toast('Archivio eliminato');
+  });
+}
+
+function cleanExpiredAbsences(){
+  // Usa data locale, non UTC (isoDate usa toISOString che è UTC)
+  const now=new Date();
+  const today=`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
+  let count=0;
+  S.employees.forEach(e=>{
+    const before=((e.daysOff||[]).length)+((e.permissionDays||[]).length);
+    e.daysOff=(e.daysOff||[]).filter(d=>d>=today);
+    e.permissionDays=(e.permissionDays||[]).filter(d=>d>=today);
+    e.vacations=(e.vacations||[]).filter(v=>v.to>=today);
+    const after=((e.daysOff||[]).length)+((e.permissionDays||[]).length);
+    count+=before-after;
+  });
+  save();renderEmployees();
+  toast(count>0?`Rimossi ${count} giorni scaduti ✓`:'Nessuna assenza scaduta da rimuovere');
+}
+
+/* ═══════════════ EDIT SHIFT CELL ═══════════════ */
+function editShiftCell(empId,dayKey,weekIdx){
+  if(!S.weekSchedules.length)return;
+  const emp=getEmp(empId);if(!emp)return;
+  const dayIdx=DAYS_KEY.indexOf(dayKey);
+  const sh=S.storeHours[dayKey];
+  const sch=S.weekSchedules[weekIdx];
+  const dayData=sch.days[dayKey];
+  const ws=new Date(sch.weekStart+'T00:00:00');
+  const dayDate=isoDate(addDays(ws,dayIdx));
+  const isOff=dayData&&dayData.dayOff&&dayData.dayOff.includes(empId);
+  const onVac=isOnVacationDay(emp,dayDate);
+  const shifts=(dayData&&dayData.shifts||[]).filter(s=>s.employeeId===empId).sort((a,b)=>t2m(a.startTime)-t2m(b.startTime));
+  const s1=shifts[0],s2=shifts[1];
+  const hasSecond=!!s2;
+  const areaOpts=(sel)=>S.areas.map(a=>`<option value="${a.id}" ${sel===a.id?'selected':''}>${esc(a.name)}</option>`).join('');
+  const defStart=sh?sh.ms:'09:00';const defEnd=sh?(sh.type==='split'?sh.me:sh.ae):'13:00';
+  const defStart2=sh&&sh.type==='split'?sh.as:'15:30';const defEnd2=sh?sh.ae:'19:30';
+
+  openModal(`
+    <div class="modal-header"><div class="modal-title">Turno — ${esc(emp.name)} — ${DAYS_FULL[dayIdx]} (Sett.${weekIdx+1})</div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      ${onVac?`<div class="alert alert-warning" style="margin-bottom:12px">🏖 Questo giorno è in <strong>periodo ferie</strong>. Assegnando un turno o un riposo, il giorno verrà escluso dalle ferie per questo dipendente.</div>`:''}
+      <div class="check-group mb-16">
+        <label class="check-item"><input type="radio" name="stype" value="work" ${!isOff&&!onVac?'checked':''} onchange="toggleSTE('work')"> Turno lavorativo</label>
+        <label class="check-item"><input type="radio" name="stype" value="off"  ${isOff&&!onVac?'checked':''} onchange="toggleSTE('off')"> Giorno di riposo</label>
+        ${onVac?`<label class="check-item"><input type="radio" name="stype" value="vacation" checked onchange="toggleSTE('vacation')"> 🏖 Mantieni in ferie</label>`:''}
+      </div>
+      <div id="workEditForm" ${(isOff||onVac)?'style="display:none"':''}>
+        <div class="fs-label">🌅 Primo turno</div>
+        <div class="form-grid mb-8">
+          <div class="form-group"><label class="form-label">Ora Inizio</label><input type="time" class="form-control" id="eStart" value="${s1?s1.startTime:defStart}"></div>
+          <div class="form-group"><label class="form-label">Ora Fine</label><input type="time" class="form-control" id="eEnd" value="${s1?s1.endTime:defEnd}"></div>
+        </div>
+        <div class="form-group mb-12"><label class="form-label">Area</label><select class="form-control" id="eArea">${areaOpts(s1?s1.areaId:'')}</select></div>
+        <div class="mb-12">
+          <label class="check-item"><input type="checkbox" id="eSecondShift" ${hasSecond?'checked':''} onchange="toggleSecondShift()"> ➕ Aggiungi secondo turno (pomeriggio)</label>
+        </div>
+        <div id="secondShiftBlock" ${hasSecond?'':'style="display:none"'}>
+          <div class="fs-label">🌆 Secondo turno</div>
+          <div class="form-grid mb-8">
+            <div class="form-group"><label class="form-label">Ora Inizio</label><input type="time" class="form-control" id="eStart2" value="${s2?s2.startTime:defStart2}"></div>
+            <div class="form-group"><label class="form-label">Ora Fine</label><input type="time" class="form-control" id="eEnd2" value="${s2?s2.endTime:defEnd2}"></div>
+          </div>
+          <div class="form-group"><label class="form-label">Area</label><select class="form-control" id="eArea2">${areaOpts(s2?s2.areaId:'')}</select></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Annulla</button>
+      <button class="btn btn-primary" onclick="saveShiftEdit('${empId}','${dayKey}',${weekIdx},'${dayDate}')">Salva</button>
+    </div>`);
+}
+function toggleSTE(val){const f=document.getElementById('workEditForm');if(f)f.style.display=val==='work'?'':'none'}
+function toggleSecondShift(){const b=document.getElementById('secondShiftBlock');if(b)b.style.display=document.getElementById('eSecondShift').checked?'':'none'}
+function saveShiftEdit(empId,dayKey,weekIdx,dayDate){
+  const sch=S.weekSchedules[weekIdx];if(!sch)return;
+  const type=document.querySelector('input[name="stype"]:checked');if(!type)return;
+  const dd=sch.days[dayKey];
+  const emp=getEmp(empId);
+
+  // Se il tipo è "vacation" → mantieni in ferie, non fare nulla
+  if(type.value==='vacation'){closeModal();return}
+
+  dd.dayOff=dd.dayOff.filter(id=>id!==empId);
+  dd.shifts=dd.shifts.filter(s=>s.employeeId!==empId);
+
+  // Se il giorno era in ferie e ora assegniamo turno/riposo → registra override
+  if(dayDate&&emp&&isOnVacationDay(emp,dayDate)){
+    if(!emp.vacationOverrides)emp.vacationOverrides=[];
+    if(!emp.vacationOverrides.includes(dayDate))emp.vacationOverrides.push(dayDate);
+  }
+
+  if(type.value==='off'){dd.dayOff.push(empId)}
+  else{
+    const s=document.getElementById('eStart').value,e=document.getElementById('eEnd').value,a=document.getElementById('eArea').value;
+    if(s&&e&&t2m(e)>t2m(s))dd.shifts.push({employeeId:empId,startTime:s,endTime:e,areaId:a,hours:shiftH(s,e)});
+    if(document.getElementById('eSecondShift')&&document.getElementById('eSecondShift').checked){
+      const s2=document.getElementById('eStart2').value,e2=document.getElementById('eEnd2').value,a2=document.getElementById('eArea2').value;
+      if(s2&&e2&&t2m(e2)>t2m(s2)){
+        if(s&&e&&t2m(s2)<t2m(e)){toast('⚠️ Il secondo turno si sovrappone al primo');return}
+        dd.shifts.push({employeeId:empId,startTime:s2,endTime:e2,areaId:a2,hours:shiftH(s2,e2)});
+      }
+    }
+  }
+  save();closeModal();renderSchedule();renderEmployees();
+}
+
+/* ═══════════════ ASSENZA URGENTE ═══════════════ */
+function openEmergencyModal(){
+  if(!S.weekSchedules.length){toast('Nessun orario generato');return}
+  // BUG4-guard: non aprire su archivio (già gestito da emergencyBtn display, ma doppio check)
+  if(S.currentViewSource!=='current'){toast('Funzione disponibile solo sull\'orario corrente');return}
+  const idx=S.currentViewWeekIdx;
+  const sch=S.weekSchedules[idx];
+  const ws=new Date(sch.weekStart+'T00:00:00');
+
+  const empOpts=S.employees
+    .filter(e=>!isOnVacation(e,sch.weekStart))
+    .map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('');
+
+  const dayOpts=DAYS_KEY.map((k,i)=>{
+    const sh=S.storeHours[k];if(!sh||!sh.open)return '';
+    const date=isoDate(addDays(ws,i));
+    return `<option value="${k}|${date}">${DAYS_FULL[i]} (${fmtShort(addDays(ws,i))})</option>`;
+  }).filter(Boolean).join('');
+
+  // BUG1: verifica che ci siano opzioni valide
+  if(!empOpts){toast('Nessun dipendente disponibile questa settimana');return}
+  if(!dayOpts){toast('Nessun giorno aperto questa settimana');return}
+
+  openModal(`
+    <div class="modal-header">
+      <div class="modal-title">🚨 Gestione Assenza Urgente — Sett. ${idx+1}</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="alert alert-warning">
+        <strong>Assenza improvvisa:</strong> Il sistema rimuoverà i turni del dipendente per il giorno selezionato
+        e ti mostrerà le aree scoperte, permettendoti di assegnare un sostituto senza rigenerare tutto.
+      </div>
+      <div class="form-grid mb-16">
+        <div class="form-group">
+          <label class="form-label">Dipendente assente</label>
+          <select class="form-control" id="emergEmp" onchange="refreshEmergencyInfo()">${empOpts}</select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Giorno di assenza</label>
+          <select class="form-control" id="emergDay" onchange="refreshEmergencyInfo()">${dayOpts}</select>
+        </div>
+      </div>
+      <div class="form-group mb-16">
+        <label class="form-label">Tipo assenza</label>
+        <div class="check-group mt-4">
+          <label class="check-item"><input type="radio" name="absType" value="malattia" checked> 🤒 Malattia</label>
+          <label class="check-item"><input type="radio" name="absType" value="permesso"> 🗓 Permesso</label>
+          <label class="check-item"><input type="radio" name="absType" value="ferie"> 🏖 Ferie (giorno singolo)</label>
+        </div>
+      </div>
+      <div id="emergInfo"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Annulla</button>
+      <button class="btn btn-danger" onclick="applyEmergency(${idx})">✓ Registra Assenza e Assegna Coperture</button>
+    </div>`,true);
+
+  setTimeout(refreshEmergencyInfo,80);
+}
+
+function refreshEmergencyInfo(){
+  const empId=document.getElementById('emergEmp').value;
+  const dayVal=document.getElementById('emergDay').value;
+  if(!empId||!dayVal)return;
+  const[dayKey,dayDate]=dayVal.split('|');
+  const idx=S.currentViewWeekIdx;
+  const sch=S.weekSchedules[idx];
+  const dayData=sch.days[dayKey];
+  const dayIdx=DAYS_KEY.indexOf(dayKey);
+
+  const removedShifts=(dayData&&dayData.shifts||[]).filter(s=>s.employeeId===empId);
+  const removedAreas=removedShifts.map(s=>{const a=getArea(s.areaId);return a?a.name:'—'});
+
+  const el=document.getElementById('emergInfo');
+  if(!removedShifts.length){
+    el.innerHTML=`<div class="alert alert-info">Questo dipendente non ha turni assegnati il ${DAYS_FULL[dayIdx]}.</div>`;
+    return;
+  }
+
+  // BUG5+BUG7: escludi l'assente, chi è in ferie/assenza, chi ha già un turno sovrapposto
+  const buildSubstOpts=(shift)=>S.employees
+    .filter(e=>{
+      if(e.id===empId)return false; // BUG7: no auto-sostituzione
+      if(isOnVacation(e,sch.weekStart))return false;
+      if((e.daysOff||[]).includes(dayDate))return false;
+      if((e.permissionDays||[]).includes(dayDate))return false;
+      if(dayData&&dayData.dayOff&&dayData.dayOff.includes(e.id))return false;
+      // BUG5: escludi chi ha già un turno sovrapposto con questo orario
+      const hasOverlap=(dayData.shifts||[]).some(s=>
+        s.employeeId===e.id&&
+        t2m(s.startTime)<t2m(shift.endTime)&&
+        t2m(s.endTime)>t2m(shift.startTime)
+      );
+      if(hasOverlap)return false;
+      return true;
+    })
+    .map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('');
+
+  el.innerHTML=`
+    <div class="alert alert-danger"><strong>Turni scoperti con l'assenza di ${esc(getEmp(empId)?.name||'')}:</strong>
+      <ul style="margin-top:5px;padding-left:18px">${removedAreas.map(a=>`<li>${a}</li>`).join('')}</ul>
+    </div>
+    <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--primary)">Assegna copertura per ogni area scoperta:</div>
+    ${removedShifts.map((s,i)=>{
+      const area=getArea(s.areaId);
+      const color=area?area.color:'#3498DB';
+      const substOpts=buildSubstOpts(s);
+      return `<div class="uncover-row">
+        <div class="uncover-area">
+          <span style="width:10px;height:10px;background:${color};border-radius:2px;display:inline-block"></span>
+          ${area?esc(area.name):'Area sconosciuta'}<br>
+          <span style="font-size:11px;font-weight:400;color:var(--muted)">${s.startTime}–${s.endTime}</span>
+        </div>
+        <div>
+          <select class="form-control" id="cover_${i}" style="font-size:12px">
+            <option value="">— Nessun sostituto —</option>
+            ${substOpts||'<option disabled>Nessun dipendente disponibile</option>'}
+          </select>
+        </div>
+      </div>`;
+    }).join('')}
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">💡 I sostituti assegnati prenderanno lo stesso orario del turno scoperto. Sono esclusi dipendenti con turni sovrapposti.</div>`;
+}
+
+function applyEmergency(weekIdx){
+  const empId=document.getElementById('emergEmp').value;
+  const dayVal=document.getElementById('emergDay').value;
+  if(!empId||!dayVal){toast('Seleziona dipendente e giorno');return}
+  // Guard: solo orario corrente, non archivio
+  if(S.currentViewSource!=='current'){toast('Non modificabile: orario in archivio');return}
+  if(!S.weekSchedules[weekIdx]){toast('Settimana non trovata');return}
+
+  const[dayKey,dayDate]=dayVal.split('|');
+  const absType=document.querySelector('input[name="absType"]:checked')?.value||'malattia';
+
+  const sch=S.weekSchedules[weekIdx];
+  const dayData=sch.days[dayKey];
+  if(!dayData){toast('Dati giorno non trovati');return}
+
+  const removedShifts=(dayData.shifts||[]).filter(s=>s.employeeId===empId);
+
+  // Rimuovi turni dipendente assente
+  dayData.shifts=dayData.shifts.filter(s=>s.employeeId!==empId);
+  if(!dayData.dayOff.includes(empId))dayData.dayOff.push(empId);
+
+  // Registra assenza sul dipendente (BUG3: ferie giorno singolo → daysOff come malattia)
+  const emp=getEmp(empId);
+  if(emp){
+    if(absType==='permesso'){
+      if(!emp.permissionDays)emp.permissionDays=[];
+      if(!emp.permissionDays.includes(dayDate))emp.permissionDays.push(dayDate);
+    } else {
+      // malattia e ferie giorno singolo → daysOff
+      if(!emp.daysOff)emp.daysOff=[];
+      if(!emp.daysOff.includes(dayDate))emp.daysOff.push(dayDate);
+    }
+  }
+
+  // Assegna sostituti (BUG7: no auto-sostituzione)
+  removedShifts.forEach((s,i)=>{
+    const substId=document.getElementById(`cover_${i}`)?.value;
+    if(substId&&substId!==empId){
+      const substEmp=getEmp(substId);
+      // Rimuovi sostituto da dayOff se era in riposo
+      dayData.dayOff=dayData.dayOff.filter(id=>id!==substId);
+      // Calcola ore già lavorate dal sostituto questa settimana per marcare straordinario
+      let substWeekH=0;
+      DAYS_KEY.forEach(dk=>{
+        (sch.days[dk]&&sch.days[dk].shifts||[]).forEach(sh=>{if(sh.employeeId===substId)substWeekH+=sh.hours||0});
+      });
+      const newShiftH=shiftH(s.startTime,s.endTime);
+      const contract=substEmp?empMaxH(substEmp):0;
+      const isOT=contract>0&&(substWeekH+newShiftH)>contract;
+      dayData.shifts.push({
+        employeeId:substId,
+        startTime:s.startTime,
+        endTime:s.endTime,
+        areaId:s.areaId,
+        hours:newShiftH,
+        isSubstitute:true,
+        overtime:isOT||undefined
+      });
+    }
+  });
+
+  save();closeModal();renderSchedule();renderEmployees();
+  const absLabel=absType==='permesso'?'Permesso':absType==='ferie'?'Ferie':'Malattia';
+  toast(`${absLabel} registrata per ${emp?emp.name:'dipendente'} ✓`);
+}
+
+/* ═══════════════ EMPLOYEE MODAL ═══════════════ */
+let _fsIdx=0,_fsBIdx=0,_vacIdx=0,_prefIdx=0;
+function openEmpModal(id){
+  const emp=id?getEmp(id):null;const edit=!!emp;
+  const cc=(emp&&emp.customChars||[]).join(', ');
+  const fsRows=(emp&&emp.fixedSchedule||[]).map((fs,i)=>buildFsRow(fs,i)).join('');
+  const fsBRows=(emp&&emp.fixedScheduleB||[]).map((fs,i)=>buildFsBRow(fs,i)).join('');
+  const isBiweekly=!!(emp&&emp.fixedScheduleB&&emp.fixedScheduleB.length>0);
+  const bwFirstA=(emp&&emp.biweeklyFirstWeek)==='B'?'':'checked';
+  const bwFirstB=(emp&&emp.biweeklyFirstWeek)==='B'?'checked':'';
+  const vacRows=(emp&&emp.vacations||[]).map((v,i)=>buildVacRow(v,i)).join('');
+  const prefRows=(emp&&emp.datePreferences||[]).map((p,i)=>buildPrefRow(p,i)).join('');
+
+  openModal(`
+    <div class="modal-header"><div class="modal-title">${edit?'Modifica Dipendente':'Nuovo Dipendente'}</div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="form-group mb-16">
+        <label class="form-label">Nome e Cognome *</label>
+        <input type="text" class="form-control" id="eName" value="${esc(emp?emp.name:'')}" placeholder="Es. Mario Rossi">
+      </div>
+
+      <div class="form-group mb-16">
+        <label class="form-label">Tipo Orario Contrattuale</label>
+        <div class="check-group mt-8">
+          <label class="check-item"><input type="radio" name="eHT" value="38"     ${!emp||emp.hoursType==='38'?'checked':''} onchange="toggleHT('38')"> 38 ore/settimana</label>
+          <label class="check-item"><input type="radio" name="eHT" value="40"     ${emp&&emp.hoursType==='40'?'checked':''} onchange="toggleHT('40')"> 40 ore/settimana</label>
+          <label class="check-item"><input type="radio" name="eHT" value="custom" ${emp&&emp.hoursType==='custom'?'checked':''} onchange="toggleHT('custom')"> Personalizzato</label>
+          <label class="check-item"><input type="radio" name="eHT" value="fixed"  ${emp&&emp.hoursType==='fixed'?'checked':''} onchange="toggleHT('fixed')"> Orario fisso assegnato</label>
+        </div>
+        <div id="htCustom" class="mt-8" ${emp&&emp.hoursType==='custom'?'':'style="display:none"'}>
+          <input type="number" class="form-control" id="eCustomH" value="${emp&&emp.customHours||''}" placeholder="Es. 36" min="1" max="60" style="width:110px">
+        </div>
+      </div>
+
+      <div id="htFixed" ${emp&&emp.hoursType==='fixed'?'':'style="display:none"'}>
+        <div class="form-group mb-12">
+          <label class="check-item" style="margin-bottom:10px">
+            <input type="checkbox" id="eBiweekly" ${isBiweekly?'checked':''} onchange="toggleBiweekly()">
+            <span style="font-weight:600">Bisettimanale (alterna Settimana A / Settimana B)</span>
+          </label>
+
+          <div id="schedA">
+            <label class="form-label" id="schedALabel">${isBiweekly?'Turni Settimana A':'Turni Fissi Assegnati'}</label>
+            <div id="fsRows" class="mt-8">${fsRows}</div>
+            <button class="btn btn-secondary btn-sm mt-8" type="button" onclick="addFsRow()">+ Aggiungi Turno</button>
+          </div>
+
+          <div id="schedB" style="${isBiweekly?'':'display:none'}">
+            <div class="divider" style="margin:12px 0 8px"></div>
+            <label class="form-label">Turni Settimana B</label>
+            <div id="fsBRows" class="mt-8">${fsBRows}</div>
+            <button class="btn btn-secondary btn-sm mt-8" type="button" onclick="addFsBRow()">+ Aggiungi Turno B</button>
+            <div class="mt-10" style="font-size:12px;color:var(--text)">
+              <span style="font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)">Prima settimana generata usa:</span>
+              <label class="check-item" style="display:inline-flex;margin-left:12px"><input type="radio" name="eBwFirst" value="A" ${bwFirstA}> A</label>
+              <label class="check-item" style="display:inline-flex;margin-left:8px"><input type="radio" name="eBwFirst" value="B" ${bwFirstB}> B</label>
+            </div>
+          </div>
+        </div>
+        <div class="divider"></div>
+      </div>
+
+      <div class="form-group mb-16">
+        <label class="form-label">Caratteristiche</label>
+        <div class="check-group mt-8">
+          <label class="check-item"><input type="checkbox" id="eDir" ${emp&&emp.isDirectore?'checked':''}> 👔 Direttore (domenica sempre libera)</label>
+          <label class="check-item"><input type="checkbox" id="eProf" ${emp&&emp.isProfumeria?'checked':''}> 🌸 Specializzato Profumeria</label>
+          <label class="check-item"><input type="checkbox" id="eOpen" ${emp&&emp.canOpenStore?'checked':''}> 🔑 Abilitato Apertura</label>
+          <label class="check-item"><input type="checkbox" id="eCamion" ${emp&&emp.takesMorningDelivery?'checked':''}> 🚚 Prende Camion (7:00)</label>
+        </div>
+        <div class="mt-8">
+          <label class="form-label">Altre caratteristiche (separate da virgola)</label>
+          <input type="text" class="form-control mt-4" id="eCC" value="${esc(cc)}" placeholder="Es. Magazziniere, Formatore">
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="form-group mb-12">
+        <label class="form-label">Periodi Ferie (dal – al)</label>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Inserisci i periodi di ferie. La generazione automatica li rispetterà per tutte le settimane.</div>
+        <div id="vacRows">${vacRows}</div>
+        <button class="btn btn-secondary btn-sm mt-8" type="button" onclick="addVacRow()">+ Aggiungi Periodo Ferie</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="form-group mb-12">
+        <label class="form-label">⭐ Preferenze di Turno</label>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:8px">Indica una data specifica in cui il dipendente preferisce lavorare al mattino o al pomeriggio. Il sistema proverà ad accontentarla solo per quella data, compatibilmente con le esigenze del negozio (non garantito). Non si applica a direttore/orario fisso.</div>
+        <div id="prefRows">${prefRows}</div>
+        <button class="btn btn-secondary btn-sm mt-8" type="button" onclick="addPrefRow()">+ Aggiungi Preferenza</button>
+      </div>
+
+      <div class="divider"></div>
+
+      <div class="form-grid">
+        <div class="form-group">
+          <label class="form-label">Giorni Assenza/Ferie singoli (una data per riga, AAAA-MM-GG)</label>
+          <textarea class="form-control" id="eDaysOff" rows="3" placeholder="2026-06-30&#10;2026-07-01">${(emp&&emp.daysOff||[]).join('\n')}</textarea>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Giorni Permesso singoli (una data per riga)</label>
+          <textarea class="form-control" id="ePermDays" rows="3" placeholder="2026-06-25">${(emp&&emp.permissionDays||[]).join('\n')}</textarea>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      ${edit?`<button class="btn btn-danger" onclick="deleteEmp('${id}')">Elimina</button>`:''}
+      <button class="btn btn-secondary" onclick="closeModal()">Annulla</button>
+      <button class="btn btn-primary" onclick="saveEmp('${id||''}')">Salva</button>
+    </div>`,true);
+}
+
+function buildVacRow(v,idx){
+  return `<div class="vac-row" id="vr_${idx}">
+    <div class="form-group"><label class="form-label">Dal</label><input type="date" class="form-control" id="vf_${idx}" value="${v.from||''}"></div>
+    <div class="form-group"><label class="form-label">Al</label><input type="date" class="form-control" id="vt_${idx}" value="${v.to||''}"></div>
+    <div class="form-group"><label class="form-label">Nota (opz.)</label><input type="text" class="form-control" id="vn_${idx}" value="${esc(v.note||'')}" placeholder="Es. Agosto"></div>
+    <button class="btn btn-danger btn-sm btn-icon" style="align-self:flex-end;margin-bottom:2px" type="button" onclick="rmVacRow('${idx}')">×</button>
+  </div>`;
+}
+
+function addVacRow(){
+  _vacIdx++;
+  const c=document.getElementById('vacRows');
+  const d=document.createElement('div');
+  d.innerHTML=buildVacRow({from:'',to:'',note:''},'v'+_vacIdx);
+  c.appendChild(d.firstElementChild);
+}
+function rmVacRow(idx){const r=document.getElementById(`vr_${idx}`);if(r)r.remove()}
+
+function buildPrefRow(p,idx){
+  const isAft=p.slot==='afternoon';
+  return `<div class="pref-row" id="prr_${idx}" style="border:1px solid var(--border);border-radius:8px;padding:10px;margin-bottom:8px">
+    <div class="form-grid mb-8">
+      <div class="form-group"><label class="form-label">Data</label><input type="date" class="form-control" id="pdate_${idx}" value="${p.date||''}"></div>
+      <div class="form-group">
+        <label class="form-label">Fascia preferita</label>
+        <div class="check-group mt-4">
+          <label class="check-item"><input type="radio" name="pslot_${idx}" value="morning" ${!isAft?'checked':''}> 🌅 Mattina</label>
+          <label class="check-item"><input type="radio" name="pslot_${idx}" value="afternoon" ${isAft?'checked':''}> 🌆 Pomeriggio</label>
+        </div>
+      </div>
+    </div>
+    <div class="form-group mb-8"><label class="form-label">Nota (opz.)</label><input type="text" class="form-control" id="pn_${idx}" value="${esc(p.note||'')}" placeholder="Es. visita medica"></div>
+    <button class="btn btn-danger btn-sm" type="button" onclick="rmPrefRow('${idx}')">× Rimuovi</button>
+  </div>`;
+}
+function addPrefRow(){
+  _prefIdx++;
+  const c=document.getElementById('prefRows');
+  const d=document.createElement('div');
+  d.innerHTML=buildPrefRow({date:'',slot:'morning',note:''},'p'+_prefIdx);
+  c.appendChild(d.firstElementChild);
+}
+function rmPrefRow(idx){const r=document.getElementById(`prr_${idx}`);if(r)r.remove()}
+function collectPreferences(){
+  return Array.from(document.querySelectorAll('#prefRows .pref-row')).map(row=>{
+    const i=row.id.replace('prr_','');
+    const date=document.getElementById(`pdate_${i}`).value;
+    if(!date||!/^\d{4}-\d{2}-\d{2}$/.test(date))return null;
+    const slotSel=document.querySelector(`input[name="pslot_${i}"]:checked`);
+    const slot=slotSel?slotSel.value:'morning';
+    const note=document.getElementById(`pn_${i}`).value.trim();
+    return {date,slot,note};
+  }).filter(Boolean);
+}
+
+function buildFsRow(fs,idx){
+  const dayOpts=DAYS_KEY.map((k,i)=>`<option value="${k}" ${fs.day===k?'selected':''}>${DAYS_FULL[i]}</option>`).join('');
+  const areaOpts=S.areas.map(a=>`<option value="${a.id}" ${fs.areaId===a.id?'selected':''}>${esc(a.name)}</option>`).join('');
+  const areaOpts2=S.areas.map(a=>`<option value="${a.id}" ${fs.areaId2===a.id?'selected':''}>${esc(a.name)}</option>`).join('');
+  const isSplit=fs.type==='split';
+  return `<div class="fs-row" id="fsr_${idx}">
+    <div class="fs-row-top">
+      <select class="form-control" id="fsd_${idx}">${dayOpts}</select>
+      <div style="display:flex;gap:14px;align-items:center">
+        <label class="check-item" style="font-size:12px"><input type="radio" name="fstype_${idx}" value="continuous" ${!isSplit?'checked':''} onchange="toggleFsType('${idx}','continuous')"> Continuato</label>
+        <label class="check-item" style="font-size:12px"><input type="radio" name="fstype_${idx}" value="split" ${isSplit?'checked':''} onchange="toggleFsType('${idx}','split')"> Con pausa pranzo</label>
+      </div>
+      <button class="btn btn-danger btn-sm btn-icon" type="button" onclick="rmFsRow('${idx}')">×</button>
+    </div>
+    <div id="fscont_${idx}" ${isSplit?'style="display:none"':''}>
+      <div class="fs-times">
+        <div><div class="fs-label">Inizio</div><input type="time" class="form-control time-input" id="fss_${idx}" value="${fs.startTime||'09:00'}"></div>
+        <span style="padding-top:16px;color:var(--muted)">–</span>
+        <div><div class="fs-label">Fine</div><input type="time" class="form-control time-input" id="fse_${idx}" value="${fs.endTime||'17:00'}"></div>
+        <div style="flex:1"><div class="fs-label">Area</div><select class="form-control" id="fsa_${idx}">${areaOpts}</select></div>
+      </div>
+    </div>
+    <div id="fssplit_${idx}" ${!isSplit?'style="display:none"':''}>
+      <div class="fs-split-row">
+        <div>
+          <div class="fs-label">🌅 Mattina</div>
+          <div class="fs-times">
+            <input type="time" class="form-control time-input" id="fss1_${idx}" value="${fs.startTime||'09:00'}" style="width:100px">
+            <span style="color:var(--muted)">–</span>
+            <input type="time" class="form-control time-input" id="fse1_${idx}" value="${fs.endTime||'13:00'}" style="width:100px">
+          </div>
+          <select class="form-control mt-4" id="fsa1_${idx}">${areaOpts}</select>
+        </div>
+        <div>
+          <div class="fs-label">🌆 Pomeriggio</div>
+          <div class="fs-times">
+            <input type="time" class="form-control time-input" id="fss2_${idx}" value="${fs.startTime2||'15:30'}" style="width:100px">
+            <span style="color:var(--muted)">–</span>
+            <input type="time" class="form-control time-input" id="fse2_${idx}" value="${fs.endTime2||'19:30'}" style="width:100px">
+          </div>
+          <select class="form-control mt-4" id="fsa2_${idx}">${areaOpts2||areaOpts}</select>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function toggleFsType(idx,type){
+  document.getElementById('fscont_'+idx).style.display=type==='split'?'none':'';
+  document.getElementById('fssplit_'+idx).style.display=type==='split'?'':'none';
+}
+function addFsRow(){
+  _fsIdx++;
+  const c=document.getElementById('fsRows');
+  const d=document.createElement('div');
+  d.innerHTML=buildFsRow({day:'mon',type:'continuous',startTime:'09:00',endTime:'17:00',areaId:(S.areas[0]||{}).id||''},'n'+_fsIdx);
+  c.appendChild(d.firstElementChild);
+}
+function rmFsRow(idx){const r=document.getElementById(`fsr_${idx}`);if(r)r.remove()}
+
+function buildFsBRow(fs,idx){
+  const dayOpts=DAYS_KEY.map((k,i)=>`<option value="${k}" ${fs.day===k?'selected':''}>${DAYS_FULL[i]}</option>`).join('');
+  const areaOpts=S.areas.map(a=>`<option value="${a.id}" ${fs.areaId===a.id?'selected':''}>${esc(a.name)}</option>`).join('');
+  const areaOpts2=S.areas.map(a=>`<option value="${a.id}" ${fs.areaId2===a.id?'selected':''}>${esc(a.name)}</option>`).join('');
+  const isSplit=fs.type==='split';
+  return `<div class="fs-row" id="fsrb_${idx}">
+    <div class="fs-row-top">
+      <select class="form-control" id="fsdb_${idx}">${dayOpts}</select>
+      <div style="display:flex;gap:14px;align-items:center">
+        <label class="check-item" style="font-size:12px"><input type="radio" name="fstypeb_${idx}" value="continuous" ${!isSplit?'checked':''} onchange="toggleFsBType('${idx}','continuous')"> Continuato</label>
+        <label class="check-item" style="font-size:12px"><input type="radio" name="fstypeb_${idx}" value="split" ${isSplit?'checked':''} onchange="toggleFsBType('${idx}','split')"> Con pausa pranzo</label>
+      </div>
+      <button class="btn btn-danger btn-sm btn-icon" type="button" onclick="rmFsBRow('${idx}')">×</button>
+    </div>
+    <div id="fscontb_${idx}" ${isSplit?'style="display:none"':''}>
+      <div class="fs-times">
+        <div><div class="fs-label">Inizio</div><input type="time" class="form-control time-input" id="fssb_${idx}" value="${fs.startTime||'09:00'}"></div>
+        <span style="padding-top:16px;color:var(--muted)">–</span>
+        <div><div class="fs-label">Fine</div><input type="time" class="form-control time-input" id="fseb_${idx}" value="${fs.endTime||'17:00'}"></div>
+        <div style="flex:1"><div class="fs-label">Area</div><select class="form-control" id="fsab_${idx}">${areaOpts}</select></div>
+      </div>
+    </div>
+    <div id="fssplitb_${idx}" ${!isSplit?'style="display:none"':''}>
+      <div class="fs-split-row">
+        <div>
+          <div class="fs-label">🌅 Mattina</div>
+          <div class="fs-times">
+            <input type="time" class="form-control time-input" id="fssb1_${idx}" value="${fs.startTime||'09:00'}" style="width:100px">
+            <span style="color:var(--muted)">–</span>
+            <input type="time" class="form-control time-input" id="fseb1_${idx}" value="${fs.endTime||'13:00'}" style="width:100px">
+          </div>
+          <select class="form-control mt-4" id="fsab1_${idx}">${areaOpts}</select>
+        </div>
+        <div>
+          <div class="fs-label">🌆 Pomeriggio</div>
+          <div class="fs-times">
+            <input type="time" class="form-control time-input" id="fssb2_${idx}" value="${fs.startTime2||'15:30'}" style="width:100px">
+            <span style="color:var(--muted)">–</span>
+            <input type="time" class="form-control time-input" id="fseb2_${idx}" value="${fs.endTime2||'19:30'}" style="width:100px">
+          </div>
+          <select class="form-control mt-4" id="fsab2_${idx}">${areaOpts2||areaOpts}</select>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+function toggleFsBType(idx,type){
+  document.getElementById('fscontb_'+idx).style.display=type==='split'?'none':'';
+  document.getElementById('fssplitb_'+idx).style.display=type==='split'?'':'none';
+}
+function addFsBRow(){
+  _fsBIdx++;
+  const c=document.getElementById('fsBRows');
+  const d=document.createElement('div');
+  d.innerHTML=buildFsBRow({day:'mon',type:'continuous',startTime:'09:00',endTime:'17:00',areaId:(S.areas[0]||{}).id||''},'n'+_fsBIdx);
+  c.appendChild(d.firstElementChild);
+}
+function rmFsBRow(idx){const r=document.getElementById(`fsrb_${idx}`);if(r)r.remove()}
+function collectFs(){
+  return Array.from(document.querySelectorAll('#fsRows .fs-row')).map(row=>{
+    const i=row.id.replace('fsr_','');
+    const typeEl=document.querySelector(`input[name="fstype_${i}"]:checked`);
+    const type=typeEl?typeEl.value:'continuous';
+    if(type==='split'){
+      // split: mattina usa fss1_/fse1_/fsa1_, pomeriggio usa fss2_/fse2_/fsa2_
+      return {
+        day:document.getElementById(`fsd_${i}`).value,
+        type:'split',
+        startTime:(document.getElementById(`fss1_${i}`)||{value:'09:00'}).value||'09:00',
+        endTime:(document.getElementById(`fse1_${i}`)||{value:'13:00'}).value||'13:00',
+        areaId:(document.getElementById(`fsa1_${i}`)||{value:''}).value||'',
+        startTime2:(document.getElementById(`fss2_${i}`)||{value:'15:30'}).value||'15:30',
+        endTime2:(document.getElementById(`fse2_${i}`)||{value:'19:30'}).value||'19:30',
+        areaId2:(document.getElementById(`fsa2_${i}`)||{value:''}).value||''
+      };
+    } else {
+      // continuato: usa fss_/fse_/fsa_
+      return {
+        day:document.getElementById(`fsd_${i}`).value,
+        type:'continuous',
+        startTime:document.getElementById(`fss_${i}`).value,
+        endTime:document.getElementById(`fse_${i}`).value,
+        areaId:document.getElementById(`fsa_${i}`).value
+      };
+    }
+  });
+}
+function collectFsB(){
+  return Array.from(document.querySelectorAll('#fsBRows .fs-row')).map(row=>{
+    const i=row.id.replace('fsrb_','');
+    const typeEl=document.querySelector(`input[name="fstypeb_${i}"]:checked`);
+    const type=typeEl?typeEl.value:'continuous';
+    if(type==='split'){
+      return {
+        day:document.getElementById(`fsdb_${i}`).value,
+        type:'split',
+        startTime:(document.getElementById(`fssb1_${i}`)||{value:'09:00'}).value||'09:00',
+        endTime:(document.getElementById(`fseb1_${i}`)||{value:'13:00'}).value||'13:00',
+        areaId:(document.getElementById(`fsab1_${i}`)||{value:''}).value||'',
+        startTime2:(document.getElementById(`fssb2_${i}`)||{value:'15:30'}).value||'15:30',
+        endTime2:(document.getElementById(`fseb2_${i}`)||{value:'19:30'}).value||'19:30',
+        areaId2:(document.getElementById(`fsab2_${i}`)||{value:''}).value||''
+      };
+    } else {
+      return {
+        day:document.getElementById(`fsdb_${i}`).value,
+        type:'continuous',
+        startTime:document.getElementById(`fssb_${i}`).value,
+        endTime:document.getElementById(`fseb_${i}`).value,
+        areaId:document.getElementById(`fsab_${i}`).value
+      };
+    }
+  });
+}
+function toggleBiweekly(){
+  const on=document.getElementById('eBiweekly').checked;
+  document.getElementById('schedB').style.display=on?'':'none';
+  document.getElementById('schedALabel').textContent=on?'Turni Settimana A':'Turni Fissi Assegnati';
+  if(on&&!document.querySelector('input[name="eBwFirst"]:checked')){
+    document.querySelector('input[name="eBwFirst"][value="A"]').checked=true;
+  }
+}
+function toggleHT(type){document.getElementById('htCustom').style.display=type==='custom'?'':'none';document.getElementById('htFixed').style.display=type==='fixed'?'':'none'}
+
+function collectVacations(){
+  return Array.from(document.querySelectorAll('#vacRows .vac-row')).map(row=>{
+    const i=row.id.replace('vr_','');
+    const from=document.getElementById(`vf_${i}`).value;
+    const to=document.getElementById(`vt_${i}`).value;
+    if(!from||!to)return null;
+    return {from,to,note:document.getElementById(`vn_${i}`).value.trim()};
+  }).filter(Boolean).filter(v=>v.from<=v.to);
+}
+
+function saveEmp(existId){
+  const name=document.getElementById('eName').value.trim();
+  if(!name){alert('Inserisci il nome del dipendente');return}
+  const ht=document.querySelector('input[name="eHT"]:checked');if(!ht)return;
+  const cc=document.getElementById('eCC').value.split(',').map(s=>s.trim()).filter(Boolean);
+  const parseLines=id=>document.getElementById(id).value.split('\n').map(s=>s.trim()).filter(s=>/^\d{4}-\d{2}-\d{2}$/.test(s));
+  const data={
+    id:existId||uid(),name,hoursType:ht.value,
+    customHours:ht.value==='custom'?parseFloat(document.getElementById('eCustomH').value)||38:null,
+    fixedSchedule:ht.value==='fixed'?collectFs():[],
+    fixedScheduleB:ht.value==='fixed'&&document.getElementById('eBiweekly').checked?collectFsB():[],
+    biweeklyFirstWeek:ht.value==='fixed'&&document.getElementById('eBiweekly').checked?(document.querySelector('input[name="eBwFirst"]:checked')||{value:'A'}).value:'A',
+    isDirectore:document.getElementById('eDir').checked,
+    isProfumeria:document.getElementById('eProf').checked,
+    canOpenStore:document.getElementById('eOpen').checked,
+    takesMorningDelivery:document.getElementById('eCamion').checked,
+    customChars:cc,
+    vacations:collectVacations(),
+    datePreferences:collectPreferences(),
+    daysOff:parseLines('eDaysOff'),
+    permissionDays:parseLines('ePermDays')
+  };
+  if(existId){const i=S.employees.findIndex(e=>e.id===existId);if(i>=0)S.employees[i]=data}
+  else S.employees.push(data);
+  save();closeModal();renderEmployees();
+  toast(existId?'Dipendente aggiornato ✓':'Dipendente aggiunto ✓');
+}
+
+function deleteEmp(id){
+  const emp=getEmp(id);if(!emp)return;
+  confirm2(`Eliminare "${emp.name}"?`,'Rimuove anche i turni assegnati.',()=>{
+    S.employees=S.employees.filter(e=>e.id!==id);
+    S.weekSchedules.forEach(sch=>{
+      DAYS_KEY.forEach(k=>{if(sch.days[k]){sch.days[k].shifts=sch.days[k].shifts.filter(s=>s.employeeId!==id);sch.days[k].dayOff=sch.days[k].dayOff.filter(i=>i!==id)}});
+    });
+    save();closeModal();renderEmployees();toast('Dipendente eliminato');
+  });
+}
+
+function confirmRefreshEmp(empId){
+  const emp=getEmp(empId);if(!emp)return;
+  if(!S.weekSchedules||!S.weekSchedules.length){toast('Nessun orario generato');return}
+  confirm2(
+    `Aggiorna orario di "${emp.name}"?`,
+    `Rigenera i turni di questo dipendente per tutte le ${S.weekSchedules.length} settimane (logica semplificata: non applica la regola domenica a 3 persone). Per orari ottimali rigenera l'intera settimana. Gli altri dipendenti non vengono toccati.`,
+    ()=>refreshEmpSchedule(empId)
+  );
+}
+
+function refreshEmpSchedule(empId){
+  const emp=getEmp(empId);if(!emp)return;
+  const restPrefLocal=['mon','tue','wed','thu','fri','sat','sun'];
+  let lastRest=null;
+
+  S.weekSchedules.forEach((sch,weekIdx)=>{
+    const weekStartISO=sch.weekStart;
+    const weekStart=new Date(weekStartISO+'T00:00:00');
+
+    // Strip employee from all days
+    DAYS_KEY.forEach(k=>{
+      if(!sch.days[k])sch.days[k]={shifts:[],dayOff:[]};
+      sch.days[k].shifts=sch.days[k].shifts.filter(s=>s.employeeId!==empId);
+      sch.days[k].dayOff=sch.days[k].dayOff.filter(id=>id!==empId);
+    });
+
+    // Mark closed days
+    DAYS_KEY.filter(k=>!S.storeHours[k]||!S.storeHours[k].open).forEach(k=>{
+      if(!sch.days[k].dayOff.includes(empId))sch.days[k].dayOff.push(empId);
+    });
+
+    // On vacation this week → skip (no shifts)
+    if(isOnVacation(emp,weekStartISO))return;
+
+    const openDays=DAYS_KEY.filter(k=>S.storeHours[k]&&S.storeHours[k].open);
+
+    if(emp.hoursType==='fixed'){
+      // Biweekly A/B support
+      const hasBiweekly=emp.fixedScheduleB&&emp.fixedScheduleB.length>0;
+      let activeSch=emp.fixedSchedule||[];
+      if(hasBiweekly){
+        const startOffset=emp.biweeklyFirstWeek==='B'?1:0;
+        if((weekIdx+startOffset)%2===1)activeSch=emp.fixedScheduleB;
+      }
+      const effectiveSch=emp.isDirectore?activeSch.filter(fs=>fs.day!=='sun'):activeSch;
+      effectiveSch.forEach(fs=>{
+        const dk=fs.day;
+        if(!sch.days[dk]||!S.storeHours[dk]||!S.storeHours[dk].open)return;
+        if(fs.type==='split'&&fs.startTime2&&fs.endTime2){
+          sch.days[dk].shifts.push({employeeId:empId,startTime:fs.startTime,endTime:fs.endTime,areaId:fs.areaId||'',hours:shiftH(fs.startTime,fs.endTime)});
+          sch.days[dk].shifts.push({employeeId:empId,startTime:fs.startTime2,endTime:fs.endTime2,areaId:fs.areaId2||fs.areaId||'',hours:shiftH(fs.startTime2,fs.endTime2)});
+        } else {
+          sch.days[dk].shifts.push({employeeId:empId,startTime:fs.startTime,endTime:fs.endTime,areaId:fs.areaId||'',hours:shiftH(fs.startTime,fs.endTime)});
+        }
+      });
+      const workedDays=[...new Set(effectiveSch.map(fs=>fs.day))];
+      let restDay;
+      if(emp.isDirectore&&openDays.includes('sun')){
+        restDay='sun';
+      } else {
+        restDay=openDays.find(d=>!workedDays.includes(d)&&d!==lastRest)||openDays.find(d=>!workedDays.includes(d));
+      }
+      if(restDay&&!sch.days[restDay].dayOff.includes(empId))sch.days[restDay].dayOff.push(empId);
+      lastRest=restDay;
+    } else {
+      // Flex employee — pick rest day (rotate, prefer less-crowded days)
+      const restCount={};
+      openDays.forEach(d=>{restCount[d]=(sch.days[d].dayOff||[]).filter(id=>id!==empId).length});
+      const weekEndISOr=isoDate(addDays(weekStart,6));
+      const prefThisWeek=(emp.datePreferences||[]).find(p=>p.date>=weekStartISO&&p.date<=weekEndISOr);
+      const prefDayKey=prefThisWeek?DAYS_KEY[(new Date(prefThisWeek.date+'T00:00:00').getDay()+6)%7]:null;
+      let restDay;
+      if(emp.isDirectore&&openDays.includes('sun')){
+        restDay='sun';
+      } else {
+        let restPool=[...openDays].filter(d=>d!=='sun');
+        if(restPool.length===0)restPool=[...openDays];
+        // Il dipendente camion non può riposare nei giorni camion
+        if(emp.takesMorningDelivery){
+          const noCam=restPool.filter(d=>!(S.camionDays&&S.camionDays[d]));
+          if(noCam.length>0)restPool=noCam;
+        }
+        const sortedForRest=[...restPool].sort((a,b)=>{
+          const penA=(a===lastRest?100:0)+(restCount[a]||0);
+          const penB=(b===lastRest?100:0)+(restCount[b]||0);
+          if(penA!==penB)return penA-penB;
+          return restPrefLocal.indexOf(a)-restPrefLocal.indexOf(b);
+        });
+        restDay=sortedForRest[0];
+      }
+      if(restDay)sch.days[restDay].dayOff.push(empId);
+      lastRest=restDay;
+
+      // Assign shifts on working days
+      const maxH=empMaxH(emp);
+      let workedH=0;
+
+      // ── Preferenza di turno (data + mattina/pomeriggio): pre-assegna prima del riempimento normale ──
+      let prefWorkDay=null;
+      if(prefThisWeek&&prefDayKey&&prefDayKey!=='sun'&&prefDayKey!==restDay&&openDays.includes(prefDayKey)){
+        const dayKeyP=prefDayKey;
+        const okAbsence=!(emp.daysOff||[]).includes(prefThisWeek.date)&&!(emp.permissionDays||[]).includes(prefThisWeek.date)&&!isOnVacationDay(emp,prefThisWeek.date);
+        const shP=S.storeHours[dayKeyP];
+        if(okAbsence&&shP&&shP.open){
+          let reqS,reqE;
+          if(shP.type==='split'){
+            if(prefThisWeek.slot==='afternoon'){reqS=t2m(shP.as);reqE=t2m(shP.ae);}
+            else{reqS=t2m(shP.ms);reqE=t2m(shP.me);}
+          } else {
+            const openM=t2m(shP.ms),closeM=t2m(shP.ae);const mid=openM+Math.round((closeM-openM)/2);
+            if(prefThisWeek.slot==='afternoon'){reqS=mid;reqE=closeM;}
+            else{reqS=openM;reqE=mid;}
+          }
+          const periodsP=shP.type==='split'?[[t2m(shP.ms),t2m(shP.me)],[t2m(shP.as),t2m(shP.ae)]]:[[t2m(shP.ms),t2m(shP.ae)]];
+          for(const [pS,pE] of periodsP){
+            if(maxH>0&&workedH>=maxH-0.1)break;
+            const s=Math.max(pS,reqS), e=Math.min(pE,reqE);
+            if(e-s<MIN_SHIFT_M)continue;
+            let durM=Math.min(e-s,6*60);
+            if(maxH>0){const remainM=Math.round((maxH-workedH)*60);durM=Math.min(durM,Math.max(remainM,0));}
+            if(durM<MIN_SHIFT_M)continue;
+            const endM=s+durM;
+            const areaCntP={};S.areas.forEach(a=>{areaCntP[a.id]=sch.days[dayKeyP].shifts.filter(x=>x.areaId===a.id).length});
+            let aIdP='';
+            if(emp.isProfumeria){const pA=S.areas.find(a=>a.name.toLowerCase().includes('profumeria'));if(pA)aIdP=pA.id}
+            if(!aIdP){const free=S.areas.find(a=>!areaCntP[a.id]);aIdP=free?free.id:(S.areas[0]||{id:''}).id}
+            const hP=shiftH(m2t(s),m2t(endM));
+            sch.days[dayKeyP].shifts.push({employeeId:empId,startTime:m2t(s),endTime:m2t(endM),areaId:aIdP,hours:hP,preferred:true});
+            workedH+=hP;
+          }
+          prefWorkDay=dayKeyP;
+        }
+      }
+
+      openDays.forEach(dayKey=>{
+        if(dayKey===restDay)return;
+        const dayIdx=DAYS_KEY.indexOf(dayKey);
+        const dayDate=isoDate(addDays(weekStart,dayIdx));
+        const sh=S.storeHours[dayKey];
+        // ferie per giorno specifico / assenze / permessi
+        if((emp.daysOff||[]).includes(dayDate)||(emp.permissionDays||[]).includes(dayDate)||isOnVacationDay(emp,dayDate)){
+          if(!sch.days[dayKey].dayOff.includes(empId))sch.days[dayKey].dayOff.push(empId);
+          return;
+        }
+        // DOMENICA: turno completo apertura→chiusura (coerente con regola 3 persone)
+        if(dayKey==='sun'){
+          const sunStart=sh.ms,sunEnd=sh.ae;
+          const sunH=shiftH(sunStart,sunEnd);
+          const areaCountS={};S.areas.forEach(a=>{areaCountS[a.id]=sch.days[dayKey].shifts.filter(s=>s.areaId===a.id).length});
+          let sunArea=S.areas.find(a=>!areaCountS[a.id])||S.areas[0]||{id:''};
+          const isOTSun=maxH>0&&(workedH+sunH)>maxH;
+          sch.days[dayKey].shifts.push({employeeId:empId,startTime:sunStart,endTime:sunEnd,areaId:sunArea.id,hours:sunH,sundayFull:true,overtime:isOTSun||undefined});
+          workedH+=sunH;
+          return;
+        }
+        // GIORNO CON PREFERENZA GIÀ PRE-ASSEGNATA: riempi solo i periodi NON coperti
+        // dalla preferenza (es. se ha chiesto solo il pomeriggio, la mattina va comunque
+        // riempita normalmente), rispettando la pausa pranzo se il negozio è split.
+        if(dayKey===prefWorkDay){
+          if(maxH>0&&workedH>=maxH-0.1)return;
+          const periodsP=sh.type==='split'?[[t2m(sh.ms),t2m(sh.me)],[t2m(sh.as),t2m(sh.ae)]]:[[t2m(sh.ms),t2m(sh.ae)]];
+          for(const [pS,pE] of periodsP){
+            if(maxH>0&&workedH>=maxH-0.1)break;
+            // periodo già (parzialmente) coperto dalla preferenza? salta
+            const covered=sch.days[dayKey].shifts.some(s=>s.employeeId===empId&&t2m(s.startTime)<pE&&t2m(s.endTime)>pS);
+            if(covered)continue;
+            const remainingP=maxH>0?maxH-workedH:8;
+            if(remainingP<=0.1)continue;
+            const periodLenH=(pE-pS)/60;
+            const durH=Math.min(remainingP,periodLenH,6); // rispetta max 6h consecutive
+            const endMp=pS+Math.round(durH*60);
+            const actualHp=shiftH(m2t(pS),m2t(endMp));
+            if(actualHp<MIN_SHIFT_M/60)continue;
+            const areaCountP={};S.areas.forEach(a=>{areaCountP[a.id]=sch.days[dayKey].shifts.filter(s=>s.areaId===a.id).length});
+            let areaIdP='';
+            if(emp.isProfumeria){const pA=S.areas.find(a=>a.name.toLowerCase().includes('profumeria'));if(pA)areaIdP=pA.id}
+            if(!areaIdP){const unc=S.areas.find(a=>!areaCountP[a.id]);areaIdP=unc?unc.id:(S.areas[0]||{id:''}).id}
+            const isOTp=maxH>0&&(workedH+actualHp)>maxH;
+            sch.days[dayKey].shifts.push({employeeId:empId,startTime:m2t(pS),endTime:m2t(endMp),areaId:areaIdP,hours:actualHp,overtime:isOTp||undefined});
+            workedH+=actualHp;
+          }
+          return;
+        }
+        const remaining=maxH>0?maxH-workedH:8;
+        if(remaining<=0.1)return;
+        const totalH=dayH(sh);
+        const availH=Math.min(remaining,totalH);
+        // camion 07:00 solo nei giorni con consegna configurati
+        const isCamionDay=!!(S.camionDays&&S.camionDays[dayKey]);
+        const startTime=(emp.takesMorningDelivery&&isCamionDay&&t2m(sh.ms)>t2m('07:00'))?'07:00':sh.ms;
+        const endTime=m2t(Math.min(t2m(startTime)+availH*60,t2m(sh.ae)));
+        const actualH=shiftH(startTime,endTime);
+        if(actualH<MIN_SHIFT_M/60)return;
+        if(S.maxConcurrentTotal&&sch.days[dayKey].shifts.length>=S.maxConcurrentTotal)return;
+        const areaCountR={};S.areas.forEach(a=>{areaCountR[a.id]=sch.days[dayKey].shifts.filter(s=>s.areaId===a.id).length});
+        const areaFitsR=a=>{const mc=a.maxConcurrent;return !mc||(areaCountR[a.id]||0)<mc};
+        let areaId='';
+        if(emp.isProfumeria){const pA=S.areas.find(a=>a.name.toLowerCase().includes('profumeria'));if(pA&&areaFitsR(pA))areaId=pA.id}
+        if(!areaId){const unc=S.areas.find(a=>!areaCountR[a.id]&&areaFitsR(a));areaId=unc?unc.id:(S.areas.find(a=>areaFitsR(a))||S.areas[0]||{id:''}).id}
+        const base=empMaxH(emp);
+        const isOT=base>0&&(workedH+actualH)>base;
+        sch.days[dayKey].shifts.push({employeeId:empId,startTime,endTime,areaId,hours:actualH,overtime:isOT||undefined});
+        workedH+=actualH;
+      });
+    }
+  });
+
+  save();renderSchedule();renderEmployees();
+  toast(`Orario di ${emp.name} aggiornato su ${S.weekSchedules.length} settimane ✓`);
+}
+
+/* ═══════════════ AREA MODAL ═══════════════ */
+function openAreaModal(id){
+  const area=id?S.areas.find(a=>a.id===id):null;const edit=!!area;
+  const curColor=area?area.color:PALETTE[0];
+  const swatches=PALETTE.map(c=>`<div class="color-swatch ${c===curColor?'selected':''}" style="background:${c}" onclick="pickColor('${c}')" data-c="${c}"></div>`).join('');
+  openModal(`
+    <div class="modal-header"><div class="modal-title">${edit?'Modifica Area':'Nuova Area'}</div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div class="form-group mb-14"><label class="form-label">Nome Area *</label><input type="text" class="form-control" id="aName" value="${esc(area?area.name:'')}" placeholder="Es. Cassa, Profumeria..."></div>
+      <div class="form-group mb-14"><label class="form-label">Colore</label><div class="color-options mt-8" id="colorOpts">${swatches}</div><input type="hidden" id="aColor" value="${curColor}"></div>
+      <div class="form-grid mb-14">
+        <div class="form-group"><label class="form-label">Copertura Minima (nr. dipendenti)</label><input type="number" class="form-control" id="aMinCov" value="${area?area.minCoverage:1}" min="0" max="10" style="width:90px"></div>
+        <div class="form-group"><label class="form-label">Max contemporanee in quest'area</label><div style="font-size:11px;color:var(--muted);margin-bottom:4px">0 = nessun limite</div><input type="number" class="form-control" id="aMaxCon" value="${area&&area.maxConcurrent!=null?area.maxConcurrent:0}" min="0" max="10" style="width:90px"></div>
+      </div>
+      <div class="form-group"><label class="form-label">Note</label><textarea class="form-control" id="aNotes" rows="2">${esc(area?area.notes||'':'')}</textarea></div>
+    </div>
+    <div class="modal-footer">
+      ${edit?`<button class="btn btn-danger" onclick="deleteArea('${id}')">Elimina</button>`:''}
+      <button class="btn btn-secondary" onclick="closeModal()">Annulla</button>
+      <button class="btn btn-primary" onclick="saveArea('${id||''}')">Salva</button>
+    </div>`);
+}
+function pickColor(c){document.querySelectorAll('.color-swatch').forEach(s=>s.classList.toggle('selected',s.dataset.c===c));document.getElementById('aColor').value=c}
+function saveArea(existId){
+  const name=document.getElementById('aName').value.trim();if(!name){alert('Inserisci il nome dell\'area');return}
+  const maxCon=parseInt(document.getElementById('aMaxCon').value)||0;
+  const data={id:existId||uid(),name,color:document.getElementById('aColor').value,minCoverage:parseInt(document.getElementById('aMinCov').value)||1,maxConcurrent:maxCon>0?maxCon:null,notes:document.getElementById('aNotes').value.trim()};
+  if(existId){const i=S.areas.findIndex(a=>a.id===existId);if(i>=0)S.areas[i]=data}else S.areas.push(data);
+  save();closeModal();renderAreas();toast(existId?'Area aggiornata ✓':'Area aggiunta ✓');
+}
+function deleteArea(id){
+  const area=S.areas.find(a=>a.id===id);if(!area)return;
+  confirm2(`Eliminare area "${area.name}"?`,'I turni perderanno il riferimento area.',()=>{S.areas=S.areas.filter(a=>a.id!==id);save();closeModal();renderAreas();toast('Area eliminata')});
+}
+function saveVincoli(){
+  const v=parseInt(document.getElementById('maxConcTotal').value)||0;
+  S.maxConcurrentTotal=v>0?v:null;
+  save();toast('Vincoli salvati ✓');
+}
+function renderVincoli(){
+  const el=document.getElementById('maxConcTotal');
+  if(el)el.value=S.maxConcurrentTotal||'';
+}
+
+/* ═══════════════ SETTINGS ═══════════════ */
+function renderSettings(){document.getElementById('setStoreName').value=S.storeName||''}
+function saveSettings(){S.storeName=document.getElementById('setStoreName').value.trim()||'Acqua & Sapone';document.getElementById('storeNameHdr').textContent=S.storeName;save();toast('Impostazioni salvate ✓')}
+function resetAll(){confirm2('Reset completo dati?','Dipendenti, aree, orari eliminati.',()=>{S=defaultState();save();renderAll();renderStoreHours();toast('Dati resettati')})}
+function exportData(){const b=new Blob([JSON.stringify(S,null,2)],{type:'application/json'});const u=URL.createObjectURL(b);const a=document.createElement('a');a.href=u;a.download=`gestionale_${new Date().toISOString().slice(0,10)}.json`;a.click();URL.revokeObjectURL(u)}
+function importData(ev){const f=ev.target.files[0];if(!f)return;const r=new FileReader();r.onload=e=>{try{S=Object.assign(defaultState(),JSON.parse(e.target.result));if(!S.weekSchedules)S.weekSchedules=[];if(!S.archivedSchedules)S.archivedSchedules=[];if(!S.currentViewSource)S.currentViewSource='current';save();renderAll();renderStoreHours();toast('Dati importati ✓')}catch(err){alert('File non valido: '+err.message)}};r.readAsText(f);ev.target.value=''}
+
+/* ═══════════════ MODALS ═══════════════ */
+function openModal(html,large){
+  const ov=document.getElementById('modalOverlay');const box=document.getElementById('modalBox');
+  box.className='modal'+(large?' modal-lg':'');box.innerHTML=html;ov.style.display='flex';
+  setTimeout(()=>{const f=box.querySelector('input[type=text],input[type=number]');if(f)f.focus()},60);
+}
+function closeModal(){document.getElementById('modalOverlay').style.display='none';document.getElementById('modalBox').innerHTML=''}
+function handleOvClick(e){if(e.target===document.getElementById('modalOverlay'))closeModal()}
+let _confirmCb=null;
+function confirm2(title,sub,cb){
+  _confirmCb=cb;
+  document.getElementById('confirmBox').innerHTML=`<div class="confirm-body"><div class="confirm-icon">⚠️</div><div class="confirm-msg">${esc(title)}</div><div class="confirm-sub">${esc(sub)}</div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="closeConfirm()">Annulla</button><button class="btn btn-danger" onclick="doConfirm()">Conferma</button></div>`;
+  document.getElementById('confirmOverlay').style.display='flex';
+}
+function doConfirm(){closeConfirm();if(_confirmCb)_confirmCb();_confirmCb=null}
+function closeConfirm(){document.getElementById('confirmOverlay').style.display='none'}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeConfirm()}});
+
+/* ═══════════════ TOAST ═══════════════ */
+function toast(msg){const el=document.getElementById('toast');el.textContent=msg;el.classList.add('show');clearTimeout(el._t);el._t=setTimeout(()=>el.classList.remove('show'),2800)}
+
+/* ═══════════════ RENDER ALL ═══════════════ */
+function renderAll(){renderEmployees();renderAreas();document.getElementById('storeNameHdr').textContent=S.storeName||'Acqua & Sapone'}
+
+/* ═══════════════ INIT ═══════════════ */
+(async()=>{
+  const overlay=document.getElementById('loadingOverlay');
+  // Auth check first — blocks UI until password verified
+  await authInit();
+  // Show loading indicator while fetching from cloud
+  overlay.style.display='flex';
+  // Try Supabase first; fall back to localStorage if offline/empty
+  const fromCloud=await loadFromSupabase();
+  if(!fromCloud)load();
+  if(!S.currentWeekStart)S.currentWeekStart=isoDate(getMonday(new Date()));
+  if(!S.weekSchedules)S.weekSchedules=[];
+  if(!S.archivedSchedules)S.archivedSchedules=[];
+  if(!S.genWeekCount)S.genWeekCount=1;
+  if(!S.currentViewSource)S.currentViewSource='current';
+  overlay.style.display='none';
+  renderAll();
+  renderStoreHours();
+  updateWeekDisplay();
+  if(fromCloud)setSyncStatus('saved');else setSyncStatus('offline');
+})();
+</script>
+</body>
+</html>
