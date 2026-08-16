@@ -348,11 +348,11 @@ textarea.form-control{resize:vertical;min-height:64px}
           <li><strong>Priorità 2 — Copertura settimana completa</strong> (inclusa domenica) per tutti i giorni di apertura</li>
           <li><strong>Turni variati</strong>: nessuno fa tutte mattine o tutti pomeriggi — mattina e pomeriggio si alternano tra i dipendenti giorno per giorno</li>
           <li><strong>Priorità 3 — Contemporaneità per area</strong>: Magazzino-Vendita è sacrificabile in caso di carenza personale</li>
-          <li><strong>Domenica: esattamente 3 persone</strong>, turno completo (apertura→chiusura), a rotazione settimanale — non sempre le stesse 3</li>
+          <li><strong>Domenica: esattamente 3 persone</strong>, giornata piena nel rispetto dell'orario del negozio (se la domenica ha la pausa pranzo vengono creati due turni, mattina e pomeriggio), a rotazione settimanale — non sempre le stesse 3</li>
+          <li><strong>Riposo settimanale: un solo giorno</strong> — chi non lavora la domenica riposa <strong>di domenica</strong>; chi è in turno la domenica riposa in un altro giorno (lun–sab)</li>
           <li>Chi inizia alle 07:00 (camion) deve fare <strong>almeno fino alle 11:00</strong> (min. 4h)</li>
           <li>Turno minimo: <strong>2 ore</strong> — nessun turno inferiore viene assegnato</li>
           <li>Turno spezzato: max 6h consecutive, poi pausa obbligatoria ≥ 2h</li>
-          <li>1 giorno di riposo settimanale per dipendente, a rotazione</li>
           <li>Rispetto ore contrattuali settimanali</li>
           <li>Se le ore contrattuali non bastano a coprire la settimana → <strong>straordinari distribuiti equamente</strong> e segnalati in arancione</li>
           <li>Specializzato profumeria → assegnato prioritariamente in Profumeria</li>
@@ -1014,10 +1014,16 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     const workedDays=[...new Set(effectiveSchedule.map(fs=>fs.day))];
     const lastRest=restHistory[emp.id];
     let restDay;
-    if(emp.isDirectore&&openDays.includes('sun')){
+    // Riposo settimanale: UN solo giorno. Se il negozio è aperto la domenica e il
+    // dipendente NON lavora la domenica, il riposo è obbligatoriamente la domenica;
+    // chi lavora la domenica riposa in un altro giorno (lun–sab).
+    if(openDays.includes('sun')&&(emp.isDirectore||!workedDays.includes('sun'))){
       restDay='sun';
     } else {
-      restDay=openDays.find(d=>!workedDays.includes(d)&&d!==lastRest)||openDays.find(d=>!workedDays.includes(d));
+      const weekPool=openDays.filter(d=>d!=='sun');
+      restDay=weekPool.find(d=>!workedDays.includes(d)&&d!==lastRest)
+            ||weekPool.find(d=>!workedDays.includes(d))
+            ||openDays.find(d=>!workedDays.includes(d));
     }
     if(restDay&&!sch.days[restDay].dayOff.includes(emp.id))sch.days[restDay].dayOff.push(emp.id);
   });
@@ -1151,6 +1157,55 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
       if(emp.isProfumeria)profRestCount[chosen]=(profRestCount[chosen]||0)+1;
     }
   });
+
+  // ── NORMALIZZAZIONE RIPOSO SETTIMANALE ──
+  // Regola: UN SOLO giorno di riposo a settimana per dipendente.
+  //  • chi NON è in turno la domenica → il riposo È la domenica (obbligatorio);
+  //  • chi lavora la domenica → il riposo è un altro giorno (lun–sab).
+  // Questa passata ripulisce eventuali riposi doppi o collocati sul giorno sbagliato.
+  const clearRest=(dk,empId)=>{sch.days[dk].dayOff=sch.days[dk].dayOff.filter(id=>id!==empId)};
+  const worksSunday=emp=>sunWorkerIds.has(emp.id)||sch.days['sun'].shifts.some(s=>s.employeeId===emp.id);
+  if(sundayOpen){
+    const weekPool=openDays.filter(d=>d!=='sun');
+    const sunDateN=isoDate(addDays(weekStart,6));
+    // Chi è assente la domenica (ferie/permesso/assenza) non può "riposare" quel giorno:
+    // gli va assegnato comunque un riposo infrasettimanale.
+    const absentSun=emp=>(emp.daysOff||[]).includes(sunDateN)||(emp.permissionDays||[]).includes(sunDateN)||isOnVacationDay(emp,sunDateN);
+    avail.forEach(emp=>{
+      if(!worksSunday(emp)&&!absentSun(emp)){
+        // riposo = domenica; via ogni altro riposo infrasettimanale
+        weekPool.forEach(d=>clearRest(d,emp.id));
+        if(!sch.days['sun'].dayOff.includes(emp.id))sch.days['sun'].dayOff.push(emp.id);
+      } else {
+        // lavora domenica (o è assente quella domenica): un solo riposo lun–sab
+        if(worksSunday(emp))clearRest('sun',emp.id);
+        const rests=weekPool.filter(d=>sch.days[d].dayOff.includes(emp.id));
+        if(rests.length>1){
+          rests.slice(1).forEach(d=>clearRest(d,emp.id));
+        } else if(rests.length===0&&weekPool.length){
+          let pool=[...weekPool];
+          if(emp.takesMorningDelivery){
+            const noCamion=pool.filter(d=>!(S.camionDays&&S.camionDays[d]));
+            if(noCamion.length)pool=noCamion;
+          }
+          const lastRest=restHistory[emp.id];
+          pool.sort((a,b)=>{
+            const penA=(a===lastRest?100:0)+sch.days[a].dayOff.length;
+            const penB=(b===lastRest?100:0)+sch.days[b].dayOff.length;
+            if(penA!==penB)return penA-penB;
+            return restPref.indexOf(a)-restPref.indexOf(b);
+          });
+          sch.days[pool[0]].dayOff.push(emp.id);
+        }
+      }
+    });
+  } else {
+    // Domenica chiusa: un solo giorno di riposo tra i giorni di apertura
+    avail.forEach(emp=>{
+      const rests=openDays.filter(d=>sch.days[d].dayOff.includes(emp.id));
+      rests.slice(1).forEach(d=>clearRest(d,emp.id));
+    });
+  }
 
   // ── HELPER: ore consecutive accumulate da empId fino a cursorM (catena senza gap ≥2h) ──
   const consecHAt=(empId,cursorM,dayKey)=>{
@@ -1385,15 +1440,16 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
       return;
     }
 
-    // ── DOMENICA: turno completo per i 3 selezionati ──
-    // I 3 lavoratori domenicali fanno un unico turno dall'apertura alla chiusura
-    // senza spezzato. Non si applica coverPeriod/fillHours normali.
+    // ── DOMENICA: giornata piena per i 3 selezionati ──
+    // I lavoratori domenicali coprono tutta la giornata di apertura RISPETTANDO
+    // l'orario del negozio: se la domenica è a orario spezzato vengono creati due
+    // turni (mattina e pomeriggio) separati dalla pausa pranzo; se è continuato
+    // un unico turno apertura→chiusura. Non si applica coverPeriod/fillHours.
     if(dayKey==='sun'&&sundayOpen&&sunWorkerIds.size>0){
       const sh_sun=S.storeHours['sun'];
-      // Orario completo: dall'apertura mattina alla chiusura pomeriggio (o sera se continuato)
-      const sunStart=sh_sun.ms;
-      const sunEnd=sh_sun.ae;
-      const sunH=shiftH(sunStart,sunEnd);
+      const sunPeriods=sh_sun.type==='split'
+        ? [[sh_sun.ms,sh_sun.me],[sh_sun.as,sh_sun.ae]]
+        : [[sh_sun.ms,sh_sun.ae]];
       // Area: distribuisci i 3 su aree diverse se possibile
       const sunAreas=[...nonMagAreas,...magAreas];
       let areaIdx=0;
@@ -1401,22 +1457,26 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
         const area=sunAreas[areaIdx%sunAreas.length]||sunAreas[0];
         areaIdx++;
         const base=empMaxH(emp);
-        const alreadyWorked=worked[emp.id]||0;
-        const isOT=base>0&&(alreadyWorked+sunH)>base;
-        sch.days['sun'].shifts.push({
-          employeeId:emp.id,
-          startTime:sunStart,
-          endTime:sunEnd,
-          areaId:area?area.id:'',
-          hours:sunH,
-          sundayFull:true,
-          overtime:isOT||undefined
+        sunPeriods.forEach(([pStart,pEnd])=>{
+          const pH=shiftH(pStart,pEnd);
+          if(pH<=0)return;
+          const alreadyWorked=worked[emp.id]||0;
+          const isOT=base>0&&(alreadyWorked+pH)>base;
+          sch.days['sun'].shifts.push({
+            employeeId:emp.id,
+            startTime:pStart,
+            endTime:pEnd,
+            areaId:area?area.id:'',
+            hours:pH,
+            sundayFull:true,
+            overtime:isOT||undefined
+          });
+          worked[emp.id]=alreadyWorked+pH;
+          if(isOT){
+            const otH=Math.min(pH,(alreadyWorked+pH)-base);
+            overtimeH[emp.id]=(overtimeH[emp.id]||0)+otH;
+          }
         });
-        worked[emp.id]=(worked[emp.id]||0)+sunH;
-        if(isOT){
-          const otH=Math.min(sunH,(alreadyWorked+sunH)-base);
-          overtimeH[emp.id]=(overtimeH[emp.id]||0)+otH;
-        }
       });
       // Segna domenica come lavorata per rotazione futura
       sunWorkerIds.forEach(id=>{restHistory['sun_'+id]=weekIndex});
@@ -1835,7 +1895,11 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
       if(Math.abs(sa-sb)>0.01)return sa-sb;
       return a-b;
     });
-    for(const stM of startCandidates){
+    for(let stM of startCandidates){
+      // Un turno non può iniziare durante la pausa pranzo del negozio: se il rientro
+      // dopo le 2h di pausa cade prima della riapertura pomeridiana, si sposta all'orario
+      // di riapertura (negozio a orario spezzato).
+      if(sh2.type==='split'&&stM>t2m(sh2.me)&&stM<t2m(sh2.as))stM=t2m(sh2.as);
       if(myDayShifts.some(s=>stM<t2m(s.endTime)&&(stM+MIN_SHIFT_M)>t2m(s.startTime)))continue;
       if(myDayShifts.some(s=>t2m(s.endTime)<=stM&&stM-t2m(s.endTime)<120))continue;
       // non iniziare un turno prima dell'apertura
@@ -2149,8 +2213,15 @@ function showGenPreview(weekIdx){
     const full=!over&&max>0&&pct>=99.5;
     const near=!over&&!full&&pct>85;
     const ot=Math.round((overtimeH[emp.id]||0)*10)/10;
+    // Giorno di riposo: mostra quello nei giorni di apertura (il riposo vero e proprio);
+    // i giorni di chiusura negozio sono indicati solo se non c'è altro riposo.
     let restDay='—';
-    DAYS_KEY.forEach((k,i)=>{if(sch.days[k]&&sch.days[k].dayOff.includes(emp.id)){restDay=DAYS_FULL[i]+((!S.storeHours[k]||!S.storeHours[k].open)?' (chiusura)':'');}});
+    DAYS_KEY.forEach((k,i)=>{
+      if(!sch.days[k]||!sch.days[k].dayOff.includes(emp.id))return;
+      const closed=!S.storeHours[k]||!S.storeHours[k].open;
+      if(closed){if(restDay==='—')restDay=DAYS_FULL[i]+' (chiusura)';}
+      else if(restDay==='—'||restDay.includes('(chiusura)'))restDay=DAYS_FULL[i];
+    });
     return `<tr>
       <td><strong>${esc(emp.name)}</strong></td>
       <td>${max>0?max+'h':'Fisso'}</td>
@@ -3313,10 +3384,15 @@ function refreshEmpSchedule(empId){
       });
       const workedDays=[...new Set(effectiveSch.map(fs=>fs.day))];
       let restDay;
-      if(emp.isDirectore&&openDays.includes('sun')){
+      // Riposo settimanale: un solo giorno. Chi non lavora la domenica riposa DI domenica;
+      // chi lavora la domenica riposa in un altro giorno (lun-sab).
+      if(openDays.includes('sun')&&(emp.isDirectore||!workedDays.includes('sun'))){
         restDay='sun';
       } else {
-        restDay=openDays.find(d=>!workedDays.includes(d)&&d!==lastRest)||openDays.find(d=>!workedDays.includes(d));
+        const weekPoolF=openDays.filter(d=>d!=='sun');
+        restDay=weekPoolF.find(d=>!workedDays.includes(d)&&d!==lastRest)
+              ||weekPoolF.find(d=>!workedDays.includes(d))
+              ||openDays.find(d=>!workedDays.includes(d));
       }
       if(restDay&&!sch.days[restDay].dayOff.includes(empId))sch.days[restDay].dayOff.push(empId);
       lastRest=restDay;
@@ -3328,7 +3404,14 @@ function refreshEmpSchedule(empId){
       const prefThisWeek=(emp.datePreferences||[]).find(p=>p.date>=weekStartISO&&p.date<=weekEndISOr);
       const prefDayKey=prefThisWeek?DAYS_KEY[(new Date(prefThisWeek.date+'T00:00:00').getDay()+6)%7]:null;
       let restDay;
-      if(emp.isDirectore&&openDays.includes('sun')){
+      // Lavora questa domenica? Solo se il negozio è aperto, il dipendente è presente e
+      // la domenica non ha già i 3 addetti previsti. Chi NON lavora la domenica ha la
+      // domenica come (unico) giorno di riposo settimanale.
+      const sunDateR=isoDate(addDays(weekStart,6));
+      const absentSunR=(emp.daysOff||[]).includes(sunDateR)||(emp.permissionDays||[]).includes(sunDateR)||isOnVacationDay(emp,sunDateR);
+      const sunStaffed=new Set(((sch.days['sun']||{shifts:[]}).shifts||[]).map(s=>s.employeeId)).size;
+      const worksSundayR=openDays.includes('sun')&&!emp.isDirectore&&!absentSunR&&sunStaffed<3;
+      if(openDays.includes('sun')&&!worksSundayR&&!absentSunR){
         restDay='sun';
       } else {
         let restPool=[...openDays].filter(d=>d!=='sun');
@@ -3400,15 +3483,20 @@ function refreshEmpSchedule(empId){
           if(!sch.days[dayKey].dayOff.includes(empId))sch.days[dayKey].dayOff.push(empId);
           return;
         }
-        // DOMENICA: turno completo apertura→chiusura (coerente con regola 3 persone)
+        // DOMENICA: giornata piena rispettando l'orario del negozio
+        // (due turni se la domenica è a orario spezzato, uno solo se continuato)
         if(dayKey==='sun'){
-          const sunStart=sh.ms,sunEnd=sh.ae;
-          const sunH=shiftH(sunStart,sunEnd);
+          if(!worksSundayR)return; // domenica = riposo per questo dipendente
           const areaCountS={};S.areas.forEach(a=>{areaCountS[a.id]=sch.days[dayKey].shifts.filter(s=>s.areaId===a.id).length});
           let sunArea=S.areas.find(a=>!areaCountS[a.id])||S.areas[0]||{id:''};
-          const isOTSun=maxH>0&&(workedH+sunH)>maxH;
-          sch.days[dayKey].shifts.push({employeeId:empId,startTime:sunStart,endTime:sunEnd,areaId:sunArea.id,hours:sunH,sundayFull:true,overtime:isOTSun||undefined});
-          workedH+=sunH;
+          const sunPeriodsR=sh.type==='split'?[[sh.ms,sh.me],[sh.as,sh.ae]]:[[sh.ms,sh.ae]];
+          sunPeriodsR.forEach(([pS,pE])=>{
+            const pH=shiftH(pS,pE);
+            if(pH<=0)return;
+            const isOTSun=maxH>0&&(workedH+pH)>maxH;
+            sch.days[dayKey].shifts.push({employeeId:empId,startTime:pS,endTime:pE,areaId:sunArea.id,hours:pH,sundayFull:true,overtime:isOTSun||undefined});
+            workedH+=pH;
+          });
           return;
         }
         // GIORNO CON PREFERENZA GIÀ PRE-ASSEGNATA: riempi solo i periodi NON coperti
