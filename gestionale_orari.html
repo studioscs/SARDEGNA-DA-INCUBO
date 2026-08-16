@@ -351,7 +351,8 @@ textarea.form-control{resize:vertical;min-height:64px}
           <li><strong>Domenica: esattamente 3 persone</strong>, giornata piena nel rispetto dell'orario del negozio (se la domenica ha la pausa pranzo vengono creati due turni, mattina e pomeriggio), a rotazione settimanale — non sempre le stesse 3</li>
           <li><strong>Riposo settimanale: un solo giorno</strong> — chi non lavora la domenica riposa <strong>di domenica</strong>; chi è in turno la domenica riposa in un altro giorno (lun–sab)</li>
           <li>Chi inizia alle 07:00 (camion) deve fare <strong>almeno fino alle 11:00</strong> (min. 4h)</li>
-          <li>Turno minimo: <strong>2 ore</strong> — nessun turno inferiore viene assegnato</li>
+          <li><strong>Nessuna giornata intera senza turno</strong>: il riposo è l'unico giorno non lavorato della settimana. Se le ore contrattuali sono esaurite, le ore vengono ridistribuite dai giorni più carichi per garantire la presenza in tutti gli altri giorni</li>
+          <li>Turno minimo: <strong>4 ore</strong> (ridotto a <strong>2 ore</strong> solo quando serve a coprire una giornata che resterebbe senza turno)</li>
           <li>Turno spezzato: max 6h consecutive, poi pausa obbligatoria ≥ 2h</li>
           <li>Rispetto ore contrattuali settimanali</li>
           <li>Se le ore contrattuali non bastano a coprire la settimana → <strong>straordinari distribuiti equamente</strong> e segnalati in arancione</li>
@@ -1527,10 +1528,12 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     }
     const isCamionDay=!!(S.camionDays&&S.camionDays[dayKey]);
     if(isCamionDay&&magAreas.length&&t2m(sh.ms)>t2m('07:00')){
-      const camEmp=working.find(e=>e.takesMorningDelivery);
+      const camMinEndPre=Math.max(t2m(sh.ms),t2m('11:00'));
+      const camEmp=working.find(e=>e.takesMorningDelivery&&!sch.days[dayKey].shifts.some(x=>
+        x.employeeId===e.id&&t2m(x.startTime)<camMinEndPre&&t2m(x.endTime)>t2m('07:00')));
       if(camEmp){
         // deve lavorare almeno fino alle 11:00 (regola: chi entra alle 7 fa min 4h)
-        const camMinEnd=Math.max(t2m(sh.ms),t2m('11:00')); // almeno apertura o 11:00
+        const camMinEnd=camMinEndPre; // almeno apertura o 11:00
         const camEndM=camMinEnd;
         const camH=shiftH('07:00',m2t(camEndM));
         // Se l'orario del negozio va oltre le 11 in mattinata, il turno camion
@@ -2002,21 +2005,19 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     });
   }
 
-  // ── PASSO 3-ter: NIENTE GIORNATE VUOTE ──
-  // Un dipendente deve lavorare in TUTTI i giorni di apertura tranne il suo unico giorno
-  // di riposo: una giornata senza turni equivale, nella tabella, a un secondo riposo.
-  // Per ogni giornata vuota si tenta prima di aggiungere ore (se il contratto lo consente),
-  // poi di SPOSTARE un turno da una giornata più carica dello stesso dipendente: le ore
-  // totali non cambiano, ma i giorni lavorati aumentano.
+  // ── PASSO 3-ter: NESSUNA GIORNATA INTERA SENZA TURNO ──
+  // Il riposo è UN giorno intero non lavorato: quindi ogni altro giorno di apertura deve
+  // avere almeno un turno. Ore vuote all'interno di una giornata sono ammesse, una
+  // giornata interamente vuota no. Per ogni giornata scoperta si procede in ordine:
+  //   1) assegnare ore contrattuali ancora disponibili (turno pieno);
+  //   2) assegnare una presenza minima di 2h se restano poche ore;
+  //   3) se il contratto è saturo, SPOSTARE ore da una giornata più carica: le ore totali
+  //      non cambiano, cambia la loro distribuzione sui giorni.
+  const MIN_PRESENCE_M=120; // presenza minima giornaliera: 2h
   const empDayH=(dk,id)=>sch.days[dk].shifts.filter(s=>s.employeeId===id).reduce((a,x)=>a+(x.hours||0),0);
   const hasShiftOn=(dk,id)=>sch.days[dk].shifts.some(s=>s.employeeId===id);
-  // concorrenza massima nell'intervallo [sM,eM) del giorno dk
-  const maxConcIn=(dk,sM,eM)=>{
-    const pts=[sM,...sch.days[dk].shifts.map(x=>t2m(x.startTime)).filter(x=>x>sM&&x<eM)];
-    return pts.reduce((mx,p)=>Math.max(mx,sch.days[dk].shifts.filter(x=>t2m(x.startTime)<=p&&t2m(x.endTime)>p).length),0);
-  };
   const dayAvailable=(emp,dk)=>{
-    if(dk==='sun')return false;                       // domenica ha regole proprie
+    if(dk==='sun')return false;                        // domenica ha regole proprie
     if(sch.days[dk].dayOff.includes(emp.id))return false;
     const dIdx=DAYS_KEY.indexOf(dk);
     const dDate=isoDate(addDays(weekStart,dIdx));
@@ -2026,68 +2027,161 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     return true;
   };
 
+  // Intervallo libero più lungo (≥minM) in un periodo, rispettando il limite di persone
+  // in contemporanea; ritorna {s,e,slot} oppure null.
+  const findFreeSlot=(emp,dk,minM,maxM)=>{
+    const shd=S.storeHours[dk];
+    if(!shd||!shd.open)return null;
+    const dIdx=DAYS_KEY.indexOf(dk);
+    const periods=shd.type==='split'
+      ? [['morning',t2m(shd.ms),t2m(shd.me)],['afternoon',t2m(shd.as),t2m(shd.ae)]]
+      : [['morning',t2m(shd.ms),t2m(shd.ae)]];
+    const stats=computeSlotStats(dIdx);
+    const ordered=[...periods].sort((a,b)=>slotScore(stats,emp,a[0],dIdx)-slotScore(stats,emp,b[0],dIdx));
+    const cap=S.maxConcurrentTotal||999;
+    for(const [slot,pS,pE] of ordered){
+      // punti di cambio della contemporaneità dentro il periodo
+      const marks=[pS,pE];
+      sch.days[dk].shifts.forEach(x=>{
+        [t2m(x.startTime),t2m(x.endTime)].forEach(m=>{if(m>pS&&m<pE&&!marks.includes(m))marks.push(m)});
+      });
+      marks.sort((a,b)=>a-b);
+      // unisci i tratti consecutivi con contemporaneità sotto il limite
+      let runS=null,best=null;
+      for(let k=0;k<marks.length-1;k++){
+        const a=marks[k],b=marks[k+1];
+        const conc=sch.days[dk].shifts.filter(x=>t2m(x.startTime)<=a&&t2m(x.endTime)>a).length;
+        const busy=sch.days[dk].shifts.some(x=>x.employeeId===emp.id&&t2m(x.startTime)<b&&t2m(x.endTime)>a);
+        if(conc<cap&&!busy){ if(runS===null)runS=a; if(!best||b-runS>best.e-best.s)best={s:runS,e:b,slot}; }
+        else runS=null;
+      }
+      if(best&&best.e-best.s>=minM){
+        const len=Math.min(best.e-best.s,maxM,6*60);
+        if(len>=minM)return {s:best.s,e:best.s+len,slot};
+      }
+    }
+    return null;
+  };
+
+  // Area con capienza libera nell'intervallo (non-magazzino prima)
+  const pickArea=(dk,sM,eM,emp)=>{
+    const fits=a=>{
+      const mc=a.maxConcurrent||999;
+      return sch.days[dk].shifts.filter(x=>x.areaId===a.id&&t2m(x.startTime)<eM&&t2m(x.endTime)>sM).length<mc;
+    };
+    if(emp.isProfumeria){
+      const pA=S.areas.find(a=>a.name.toLowerCase().includes('profumeria'));
+      if(pA&&fits(pA))return pA.id;
+    }
+    const free=[...nonMagAreas,...magAreas].find(a=>fits(a));
+    return free?free.id:((S.areas[0]||{id:''}).id);
+  };
+
+  // Recupera minuti da una giornata più carica accorciando l'ultimo turno
+  const stealMinutes=(emp,exceptDay,needM)=>{
+    let got=0;
+    const donors=openDays.filter(d=>d!==exceptDay&&d!=='sun'&&hasShiftOn(d,emp.id))
+      .sort((a,b)=>empDayH(b,emp.id)-empDayH(a,emp.id));
+    for(const don of donors){
+      if(got>=needM)break;
+      const mine=sch.days[don].shifts.filter(s=>s.employeeId===emp.id)
+        .sort((a,b)=>(b.hours||0)-(a.hours||0));
+      for(const sh3 of mine){
+        if(got>=needM)break;
+        const durM=t2m(sh3.endTime)-t2m(sh3.startTime);
+        // lascia almeno la presenza minima nel giorno donatore
+        const dayTotM=Math.round(empDayH(don,emp.id)*60);
+        const cuttable=Math.min(durM-MIN_PRESENCE_M,dayTotM-MIN_PRESENCE_M,needM-got);
+        if(cuttable<30)continue;
+        const newEndM=t2m(sh3.endTime)-cuttable;
+        sh3.endTime=m2t(newEndM);
+        sh3.hours=(sh3.hours||0)-cuttable/60;
+        worked[emp.id]=(worked[emp.id]||0)-cuttable/60;
+        got+=cuttable;
+      }
+    }
+    return got;
+  };
+
+  // Libera un periodo (mattina/pomeriggio) del giorno dk togliendolo a un dipendente che
+  // quel giorno lavora in ENTRAMBI i periodi: così il richiedente può entrare e il
+  // donatore resta comunque in turno. Non lascia scoperte le aree non-magazzino.
+  const freePeriodFromOthers=(emp,dk)=>{
+    const shd=S.storeHours[dk];
+    if(!shd||!shd.open)return false;
+    const periods=shd.type==='split'
+      ? [[t2m(shd.ms),t2m(shd.me)],[t2m(shd.as),t2m(shd.ae)]]
+      : [[t2m(shd.ms),t2m(shd.ae)]];
+    if(periods.length<2)return false; // orario continuato: nessun periodo separabile
+    const inPeriod=(x,pS,pE)=>t2m(x.startTime)<pE&&t2m(x.endTime)>pS;
+    // 1° giro: nessuna area scoperta. 2° giro (relaxed): si accetta di scoprire un'area
+    // NON di profumeria — il richiedente ne eredita la copertura — perché la presenza di
+    // tutti su ogni giornata ha priorità. La profumeria resta sempre protetta.
+    for(const relaxed of [false,true])
+    for(const [pS,pE] of periods){
+      const others=sch.days[dk].shifts.filter(x=>inPeriod(x,pS,pE)&&x.employeeId!==emp.id);
+      // candidati: presenti in questo periodo E anche nell'altro periodo dello stesso giorno
+      const cands=others.filter(x=>{
+        const e2=getEmp(x.employeeId);
+        if(!e2||e2.isDirectore||e2.hoursType==='fixed')return false;
+        return periods.some(([qS,qE])=>(qS!==pS)&&sch.days[dk].shifts.some(y=>
+          y.employeeId===x.employeeId&&inPeriod(y,qS,qE)));
+      }).sort((a,b)=>(worked[b.employeeId]||0)-(worked[a.employeeId]||0)); // chi ha più ore cede
+      for(const victim of cands){
+        const area=getArea(victim.areaId);
+        if(area&&!isMagArea(area)){
+          const covered=sch.days[dk].shifts.some(y=>y!==victim&&y.areaId===victim.areaId
+            &&t2m(y.startTime)<t2m(victim.endTime)&&t2m(y.endTime)>t2m(victim.startTime));
+          const isProfA=area.name.toLowerCase().includes('profumeria');
+          // la profumeria si può liberare solo se resta coperta o se entra un'esperta
+          if(!covered&&isProfA&&!emp.isProfumeria)continue;
+          if(!covered&&!isProfA&&!relaxed)continue;
+        }
+        sch.days[dk].shifts=sch.days[dk].shifts.filter(y=>y!==victim);
+        worked[victim.employeeId]=(worked[victim.employeeId]||0)-(victim.hours||0);
+        return true;
+      }
+    }
+    return false;
+  };
+
   flexEmps.forEach(emp=>{
     openDays.filter(dk=>dayAvailable(emp,dk)&&!hasShiftOn(dk,emp.id)).forEach(dk=>{
-      // 1) ore contrattuali ancora disponibili → nuovo turno
+      // 1) ore contrattuali disponibili → turno pieno
       if(tryAddBlock(emp,dk,6)>0.01)return;
 
-      // 2) sposta un turno da una giornata con almeno due turni del dipendente
-      const shD=S.storeHours[dk];
-      if(!shD||!shD.open)return;
-      const periodsD=shD.type==='split'
-        ? [['morning',t2m(shD.ms),t2m(shD.me)],['afternoon',t2m(shD.as),t2m(shD.ae)]]
-        : [['morning',t2m(shD.ms),t2m(shD.ae)]];
-      const statsD=computeSlotStats(DAYS_KEY.indexOf(dk));
-      const donors=openDays.filter(d=>d!==dk&&d!=='sun'
-        &&sch.days[d].shifts.filter(s=>s.employeeId===emp.id).length>=2)
-        .sort((a,b)=>empDayH(b,emp.id)-empDayH(a,emp.id));
+      const maxH=empMaxH(emp);
+      let residualM=maxH>0?Math.round((maxH-(worked[emp.id]||0))*60):6*60;
 
-      for(const don of donors){
-        const mine=sch.days[don].shifts.filter(s=>s.employeeId===emp.id)
-          .sort((a,b)=>(a.hours||0)-(b.hours||0));
-        for(const moved of mine){
-          // non lasciare scoperta un'area non-magazzino nel giorno donatore
-          const area=getArea(moved.areaId);
-          if(area&&!isMagArea(area)){
-            const others=sch.days[don].shifts.some(x=>x!==moved&&x.areaId===moved.areaId
-              &&t2m(x.startTime)<t2m(moved.endTime)&&t2m(x.endTime)>t2m(moved.startTime));
-            if(!others)continue;
-          }
-          const durM=Math.round((moved.hours||0)*60);
-          if(durM<MIN_SHIFT_M)continue;
-          const slots=[...periodsD].sort((a,b)=>
-            slotScore(statsD,emp,a[0],DAYS_KEY.indexOf(dk))-slotScore(statsD,emp,b[0],DAYS_KEY.indexOf(dk)));
-          let placed=null;
-          for(const [,pS,pE] of slots){
-            const len=Math.min(durM,pE-pS,6*60);
-            if(len<MIN_SHIFT_M)continue;
-            if(S.maxConcurrentTotal&&maxConcIn(dk,pS,pS+len)>=S.maxConcurrentTotal)continue;
-            const aMax=area&&area.maxConcurrent?area.maxConcurrent:999;
-            const aCnt=sch.days[dk].shifts.filter(x=>x.areaId===moved.areaId
-              &&t2m(x.startTime)<pS+len&&t2m(x.endTime)>pS).length;
-            if(aCnt>=aMax)continue;
-            placed={s:pS,e:pS+len};
-            break;
-          }
-          if(!placed)continue;
-          // esegui lo spostamento
-          sch.days[don].shifts=sch.days[don].shifts.filter(x=>x!==moved);
-          worked[emp.id]=(worked[emp.id]||0)-(moved.hours||0);
-          const nh=shiftH(m2t(placed.s),m2t(placed.e));
-          sch.days[dk].shifts.push({employeeId:emp.id,startTime:m2t(placed.s),endTime:m2t(placed.e),
-            areaId:moved.areaId,hours:nh,overtime:moved.overtime});
-          worked[emp.id]=(worked[emp.id]||0)+nh;
-          return;
-        }
+      // 2) poche ore residue → presenza minima
+      // 3) contratto saturo → recupera minuti dalle giornate più cariche
+      if(residualM<MIN_PRESENCE_M){
+        residualM+=stealMinutes(emp,dk,MIN_PRESENCE_M-residualM);
       }
+      if(residualM<MIN_PRESENCE_M)return; // niente ore recuperabili
+      let slot=findFreeSlot(emp,dk,MIN_PRESENCE_M,residualM);
+      // 4) contemporaneità satura: libera un periodo da chi, quel giorno, ne ha due.
+      //    La presenza di tutti su ogni giornata ha priorità sulla concentrazione delle
+      //    ore di un singolo dipendente; il donatore resta comunque in turno quel giorno.
+      for(let att=0;att<3&&!slot;att++){
+        if(!freePeriodFromOthers(emp,dk))break;
+        slot=findFreeSlot(emp,dk,MIN_PRESENCE_M,residualM);
+      }
+      if(!slot)return;                    // nessuno spazio recuperabile
+      const h=shiftH(m2t(slot.s),m2t(slot.e));
+      sch.days[dk].shifts.push({
+        employeeId:emp.id,startTime:m2t(slot.s),endTime:m2t(slot.e),
+        areaId:pickArea(dk,slot.s,slot.e,emp),hours:h
+      });
+      worked[emp.id]=(worked[emp.id]||0)+h;
     });
   });
 
-  // Avviso: giornate lavorative senza turni (oltre al riposo) non risolvibili
+  // Avviso: giornate lavorative rimaste senza turno (equivalgono a un secondo riposo)
   flexEmps.forEach(emp=>{
     const vuoti=openDays.filter(dk=>dayAvailable(emp,dk)&&!hasShiftOn(dk,emp.id));
     if(vuoti.length){
-      warnings.push(`📅 ${emp.name} (${weekRange(weekStartISO)}): ${vuoti.length} giornata/e senza turno oltre al riposo (${vuoti.map(d=>DAYS_FULL[DAYS_KEY.indexOf(d)]).join(', ')}) — ore contrattuali o limite di persone in contemporanea insufficienti.`);
+      warnings.push(`⚠️ ${emp.name} (${weekRange(weekStartISO)}): ${vuoti.map(d=>DAYS_FULL[DAYS_KEY.indexOf(d)]).join(', ')} senza alcun turno — equivale a un secondo riposo. Limite "persone in contemporanea" (${S.maxConcurrentTotal||'—'}) troppo basso per il personale disponibile.`);
     }
   });
 
@@ -2218,6 +2312,62 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     const contractual=Math.min(workedWithOt,maxH);
     const missing=Math.round((maxH-contractual)*10)/10;
     if(missing>0.5) warnings.push(`${weekRange(weekStartISO)}: ${e.name} — ${missing}h mancanti (${Math.round(contractual*10)/10}h su ${maxH}h contratto)`);
+  });
+
+  // ── PULIZIA FINALE DEI TURNI ──
+  // 1) ogni turno deve stare dentro una fascia di apertura del negozio (mattina o
+  //    pomeriggio): i turni che sbordano vengono tagliati, quelli che restano troppo
+  //    corti eliminati. Fanno eccezione i turni camion delle 07:00 e i turni fissi.
+  // 2) nessun turno sovrapposto per lo stesso dipendente: il secondo viene accorciato.
+  DAYS_KEY.forEach(dk=>{
+    if(!sch.days[dk])return;
+    const shd=S.storeHours[dk];
+    if(!shd||!shd.open){sch.days[dk].shifts=[];return}
+    const fasce=shd.type==='split'
+      ? [[t2m(shd.ms),t2m(shd.me)],[t2m(shd.as),t2m(shd.ae)]]
+      : [[t2m(shd.ms),t2m(shd.ae)]];
+    const fixedIds=new Set(fixedEmps.map(e=>e.id));
+    sch.days[dk].shifts=sch.days[dk].shifts.filter(x=>{
+      if(x.startTime==='07:00'||fixedIds.has(x.employeeId))return true; // camion / orario fisso
+      const sM=t2m(x.startTime),eM=t2m(x.endTime);
+      // fascia con maggiore sovrapposizione
+      let best=null;
+      fasce.forEach(([fS,fE])=>{
+        const ov=Math.min(eM,fE)-Math.max(sM,fS);
+        if(ov>0&&(!best||ov>best.ov))best={fS,fE,ov};
+      });
+      if(!best)return false;                       // turno completamente fuori orario
+      const nS=Math.max(sM,best.fS),nE=Math.min(eM,best.fE);
+      if(nE-nS<60)return false;                    // residuo troppo corto
+      if(nS!==sM||nE!==eM){
+        const oldH=x.hours||0;
+        x.startTime=m2t(nS);x.endTime=m2t(nE);x.hours=shiftH(x.startTime,x.endTime);
+        worked[x.employeeId]=(worked[x.employeeId]||0)-oldH+x.hours;
+      }
+      return true;
+    });
+    // sovrapposizioni dello stesso dipendente
+    const byEmp={};
+    sch.days[dk].shifts.forEach(x=>{(byEmp[x.employeeId]=byEmp[x.employeeId]||[]).push(x)});
+    Object.keys(byEmp).forEach(eid=>{
+      const list=byEmp[eid].sort((a,b)=>t2m(a.startTime)-t2m(b.startTime));
+      for(let i=0;i<list.length-1;i++){
+        const cur=list[i],nxt=list[i+1];
+        if(t2m(nxt.startTime)<t2m(cur.endTime)){
+          const oldH=nxt.hours||0;
+          const newS=t2m(cur.endTime);
+          if(newS>=t2m(nxt.endTime)-30){          // resterebbe nulla → elimina
+            sch.days[dk].shifts=sch.days[dk].shifts.filter(x=>x!==nxt);
+            worked[eid]=(worked[eid]||0)-oldH;
+            list.splice(i+1,1);i--;
+          } else {
+            nxt.startTime=m2t(newS);
+            nxt.hours=shiftH(nxt.startTime,nxt.endTime);
+            worked[eid]=(worked[eid]||0)-oldH+nxt.hours;
+          }
+        }
+      }
+    });
   });
 
   // ── CONTROLLO FINALE: un solo giorno di riposo a settimana ──
