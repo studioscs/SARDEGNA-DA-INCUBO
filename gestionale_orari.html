@@ -7,15 +7,23 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --primary:#1B4F72;--accent:#2980B9;--accent-light:#D6EAF8;
-  --surface:#F4F6F8;--surface-2:#FFFFFF;--border:#DEE2E6;
-  --text:#212529;--muted:#6C757D;--danger:#DC3545;--success:#28A745;
-  --warning:#FFC107;--warn-bg:#FFF3CD;--warn-text:#856404;
+  /* Palette salvia — toni verdi neutri e pastello */
+  --primary:#4A6152;--accent:#7A9480;--accent-light:#DDE7DC;
+  --surface:#F3F6F2;--surface-2:#FFFFFF;--border:#D8E0D5;
+  --text:#2E3A31;--muted:#7A857C;--danger:#A65C58;--success:#6B8E67;
+  --warning:#C2A878;--warn-bg:#F4EEE1;--warn-text:#7A6742;
+  /* accenti pastello per stati e badge */
+  --sage-50:#F6F9F5;--sage-100:#E8F0E6;--sage-200:#D3E0D0;--sage-300:#B3C9AF;
+  --sage-500:#7A9480;--sage-700:#4A6152;--sage-900:#33443A;
+  --clay:#A65C58;--clay-bg:#F5E7E5;--clay-text:#7C3F3C;
+  --sand:#C2A878;--sand-bg:#F4EEE1;--sand-text:#7A6742;
+  --sky:#7C93A6;--sky-bg:#E7EDF2;--sky-text:#465968;
+  --plum:#8D7C99;--plum-bg:#EFEAF2;--plum-text:#5B4E66;
   --font:"Helvetica Neue",Helvetica,Arial,sans-serif;
-  --shadow:0 1px 3px rgba(0,0,0,0.08);--r:6px
+  --shadow:0 1px 3px rgba(74,97,82,0.10);--r:6px
 }
 body{font-family:var(--font);font-size:14px;color:var(--text);background:var(--surface);line-height:1.5;min-height:100vh}
-.app-header{background:var(--primary);color:#fff;padding:0 24px;display:flex;align-items:center;height:54px;gap:14px;box-shadow:0 2px 6px rgba(0,0,0,0.18)}
+.app-header{background:var(--primary);color:#fff;padding:0 24px;display:flex;align-items:center;height:54px;gap:14px;box-shadow:0 2px 6px rgba(74,97,82,0.18)}
 .app-title{font-size:16px;font-weight:700;letter-spacing:.02em}
 .app-sub{font-size:12px;opacity:.65;margin-left:auto}
 .nav{display:flex;background:var(--surface-2);border-bottom:2px solid var(--border);padding:0 24px;overflow-x:auto;gap:0}
@@ -30,11 +38,11 @@ body{font-family:var(--font);font-size:14px;color:var(--text);background:var(--s
 .card-body{padding:20px}
 .btn{display:inline-flex;align-items:center;gap:5px;padding:7px 14px;border-radius:4px;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;border:1px solid transparent;transition:background 120ms;white-space:nowrap;line-height:1}
 .btn:disabled{opacity:.5;cursor:not-allowed}
-.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}.btn-primary:hover:not(:disabled){background:#1A6FA8}
-.btn-secondary{background:var(--surface);color:var(--text);border-color:var(--border)}.btn-secondary:hover:not(:disabled){background:#E9ECEF}
-.btn-danger{background:var(--danger);color:#fff}.btn-danger:hover:not(:disabled){background:#BD2130}
-.btn-success{background:var(--success);color:#fff}.btn-success:hover:not(:disabled){background:#218838}
-.btn-warning{background:#E67E22;color:#fff}.btn-warning:hover:not(:disabled){background:#CA6F1E}
+.btn-primary{background:var(--accent);color:#fff;border-color:var(--accent)}.btn-primary:hover:not(:disabled){background:var(--sage-700)}
+.btn-secondary{background:var(--surface);color:var(--text);border-color:var(--border)}.btn-secondary:hover:not(:disabled){background:var(--border)}
+.btn-danger{background:var(--danger);color:#fff}.btn-danger:hover:not(:disabled){background:#8F4E4A}
+.btn-success{background:var(--success);color:#fff}.btn-success:hover:not(:disabled){background:var(--sage-700)}
+.btn-warning{background:var(--sand);color:#fff}.btn-warning:hover:not(:disabled){background:#CA6F1E}
 .btn-sm{padding:4px 10px;font-size:12px}
 .btn-icon{padding:4px 8px;font-size:14px}
 .btn-group{display:flex;gap:8px;flex-wrap:wrap}
@@ -58,15 +66,15 @@ textarea.form-control{resize:vertical;min-height:64px}
 .check-item{display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px;user-select:none}
 .check-item input{cursor:pointer;width:15px;height:15px;flex-shrink:0}
 .badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700;gap:4px}
-.b-blue{background:#D1ECF1;color:#0C5460}.b-green{background:#D4EDDA;color:#155724}
-.b-red{background:#F8D7DA;color:#721C24}.b-yellow{background:#FFF3CD;color:#856404}
-.b-purple{background:#E8DAEF;color:#6C3483}.b-gray{background:#E9ECEF;color:#495057}
-.b-orange{background:#FDEBD0;color:#784212}.b-pink{background:#FDEDEC;color:#943126}
+.b-blue{background:var(--sky-bg);color:var(--sky-text)}.b-green{background:var(--sage-100);color:var(--sage-900)}
+.b-red{background:var(--clay-bg);color:var(--clay-text)}.b-yellow{background:var(--warn-bg);color:var(--warn-text)}
+.b-purple{background:var(--plum-bg);color:var(--plum-text)}.b-gray{background:var(--border);color:var(--text)}
+.b-orange{background:var(--sand-bg);color:var(--sand-text)}.b-pink{background:var(--clay-bg);color:#943126}
 .color-dot{width:14px;height:14px;border-radius:3px;display:inline-block;border:1px solid rgba(0,0,0,.12);flex-shrink:0}
 .color-options{display:flex;gap:7px;flex-wrap:wrap}
 .color-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:3px solid transparent;transition:transform 120ms,border-color 120ms}
 .color-swatch:hover{transform:scale(1.12)}
-.color-swatch.selected{border-color:#1B4F72}
+.color-swatch.selected{border-color:var(--primary)}
 .overlay{position:fixed;inset:0;background:rgba(0,0,0,.42);display:flex;align-items:center;justify-content:center;z-index:1000;padding:16px;backdrop-filter:blur(2px)}
 .modal{background:#fff;border-radius:8px;width:100%;max-width:620px;max-height:92vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.22)}
 .modal-lg{max-width:860px}
@@ -81,10 +89,10 @@ textarea.form-control{resize:vertical;min-height:64px}
 .confirm-msg{font-size:16px;font-weight:700;margin-bottom:6px}
 .confirm-sub{font-size:13px;color:var(--muted)}
 .alert{padding:11px 15px;border-radius:var(--r);font-size:13px;margin-bottom:14px;border:1px solid transparent}
-.alert-warning{background:var(--warn-bg);border-color:#FFEEBA;color:var(--warn-text)}
-.alert-info{background:#D1ECF1;border-color:#BEE5EB;color:#0C5460}
-.alert-danger{background:#F8D7DA;border-color:#F5C6CB;color:#721C24}
-.alert-success{background:#D4EDDA;border-color:#C3E6CB;color:#155724}
+.alert-warning{background:var(--warn-bg);border-color:var(--sage-200);color:var(--warn-text)}
+.alert-info{background:var(--sky-bg);border-color:#CBD9E2;color:var(--sky-text)}
+.alert-danger{background:var(--clay-bg);border-color:#DCC7C4;color:var(--clay-text)}
+.alert-success{background:var(--sage-100);border-color:var(--sage-300);color:var(--sage-900)}
 .hours-day-row{display:grid;grid-template-columns:110px 80px 1fr;gap:12px;align-items:start;padding:10px 0;border-bottom:1px solid var(--border)}
 .hours-day-row:last-child{border-bottom:none}
 .day-name{font-weight:700;font-size:13px;padding-top:7px}
@@ -94,10 +102,10 @@ textarea.form-control{resize:vertical;min-height:64px}
 /* ── WEEK SELECTOR ── */
 .week-sel{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .week-nav{background:var(--surface);border:1px solid var(--border);border-radius:4px;padding:6px 12px;cursor:pointer;font-size:16px;transition:background 120ms}
-.week-nav:hover{background:#E9ECEF}
+.week-nav:hover{background:var(--border)}
 .week-label{font-size:14px;font-weight:700;min-width:240px;text-align:center}
 /* ── MULTI-WEEK NAV BAR ── */
-.mw-bar{display:flex;align-items:center;gap:10px;padding:12px 20px;border-bottom:1px solid var(--border);background:#F8F9FA;flex-wrap:wrap}
+.mw-bar{display:flex;align-items:center;gap:10px;padding:12px 20px;border-bottom:1px solid var(--border);background:var(--sage-50);flex-wrap:wrap}
 .mw-week-btn{background:#fff;border:1px solid var(--border);border-radius:4px;padding:4px 12px;cursor:pointer;font-size:12px;font-weight:600;color:var(--muted);transition:all 120ms}
 .mw-week-btn:hover{border-color:var(--accent);color:var(--accent)}
 .mw-week-btn.active{background:var(--primary);border-color:var(--primary);color:#fff}
@@ -108,41 +116,41 @@ textarea.form-control{resize:vertical;min-height:64px}
 .sch-table th{background:var(--primary);color:#fff;padding:9px 8px;text-align:center;font-size:12px;font-weight:600;min-width:100px}
 .sch-table th.emp-col{text-align:left;min-width:150px}
 .sch-table td{padding:0;border:1px solid var(--border);vertical-align:top}
-.sch-table td.emp-cell{padding:8px 10px;background:#F8F9FA;min-width:150px;border-left:none}
+.sch-table td.emp-cell{padding:8px 10px;background:var(--sage-50);min-width:150px;border-left:none}
 .day-cell{min-height:60px;padding:5px;cursor:pointer;transition:background 120ms;display:flex;flex-direction:column;gap:3px}
-.day-cell:hover{background:#EBF5FB}
+.day-cell:hover{background:var(--sky-bg)}
 .day-cell.is-closed{background:#F0F0F0;cursor:default;justify-content:center;align-items:center}
-.day-cell.is-dayoff{background:#FFFBF0;justify-content:center;align-items:center}
-.day-cell.is-vacation{background:#FFF5F5;justify-content:center;align-items:center}
-.day-cell.is-absence{background:#FEF0F0;justify-content:center;align-items:center}
+.day-cell.is-dayoff{background:var(--sage-50);justify-content:center;align-items:center}
+.day-cell.is-vacation{background:var(--clay-bg);justify-content:center;align-items:center}
+.day-cell.is-absence{background:var(--clay-bg);justify-content:center;align-items:center}
 .day-cell.is-perm{background:#EFF9F0;justify-content:center;align-items:center}
 .cell-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
-.shift-chip{border-left:3px solid var(--accent);padding:3px 5px;border-radius:0 3px 3px 0;font-size:11px;line-height:1.4;background:#EBF5FB}
+.shift-chip{border-left:3px solid var(--accent);padding:3px 5px;border-radius:0 3px 3px 0;font-size:11px;line-height:1.4;background:var(--sky-bg)}
 .shift-time{font-weight:700}
 .shift-area{color:var(--muted);font-size:10px}
-.add-shift{font-size:10px;color:#ADB5BD;margin:auto;text-align:center;padding:8px 0}
+.add-shift{font-size:10px;color:var(--muted);margin:auto;text-align:center;padding:8px 0}
 .emp-name{font-size:12px;font-weight:700}
 /* ── HOURS BAR ── */
 .hrs-bar{height:4px;background:var(--border);border-radius:2px;overflow:hidden;margin-top:3px}
 .hrs-fill{height:100%;background:var(--accent);border-radius:2px;transition:width 300ms}
 .hrs-fill.over{background:var(--danger)}.hrs-fill.near{background:var(--warning)}
 /* ── FIXED SCHED ROWS ── */
-.fs-row{background:#F8F9FA;border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:8px}
+.fs-row{background:var(--sage-50);border:1px solid var(--border);border-radius:5px;padding:10px;margin-bottom:8px}
 .fs-row-top{display:grid;grid-template-columns:130px 1fr auto;gap:8px;align-items:center;margin-bottom:6px}
 .fs-times{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 .fs-split-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;padding-top:6px;border-top:1px dashed var(--border)}
 .fs-label{font-size:10px;font-weight:700;text-transform:uppercase;color:var(--muted);letter-spacing:.05em;margin-bottom:3px}
 /* ── VACATION ROWS ── */
-.vac-row{display:grid;grid-template-columns:1fr 1fr 1fr 32px;gap:8px;align-items:center;margin-bottom:7px;padding:8px;background:#FFF5F5;border-radius:4px;border:1px solid #F5C6CB}
+.vac-row{display:grid;grid-template-columns:1fr 1fr 1fr 32px;gap:8px;align-items:center;margin-bottom:7px;padding:8px;background:var(--clay-bg);border-radius:4px;border:1px solid #DCC7C4}
 /* ── EMERGENCY PANEL ── */
 .uncover-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center;padding:10px;border:1px solid var(--border);border-radius:4px;margin-bottom:8px;background:#FAFAFA}
 .uncover-area{font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
 /* ── CHAR TAGS ── */
 .char-tags{display:flex;flex-wrap:wrap;gap:3px}
 /* ── VAC PILL ── */
-.vac-pill{display:inline-block;background:#F8D7DA;color:#721C24;font-size:10px;padding:1px 7px;border-radius:8px;font-weight:600;margin:1px}
-.day-pill{display:inline-block;background:#FFF3CD;color:#856404;font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600}
-.day-pill.perm{background:#D1ECF1;color:#0C5460}
+.vac-pill{display:inline-block;background:var(--clay-bg);color:var(--clay-text);font-size:10px;padding:1px 7px;border-radius:8px;font-weight:600;margin:1px}
+.day-pill{display:inline-block;background:var(--warn-bg);color:var(--warn-text);font-size:10px;padding:1px 6px;border-radius:8px;font-weight:600}
+.day-pill.perm{background:var(--sky-bg);color:var(--sky-text)}
 /* ── DIVIDER ── */
 .divider{height:1px;background:var(--border);margin:16px 0}
 /* ── UTILS ── */
@@ -155,7 +163,7 @@ textarea.form-control{resize:vertical;min-height:64px}
 .empty{text-align:center;padding:48px 24px;color:var(--muted)}
 .empty-icon{font-size:44px;margin-bottom:12px}
 .empty-text{font-size:15px;font-weight:600}.empty-sub{font-size:12px;margin-top:5px}
-.info-box{background:#EBF5FB;border:1px solid #AED6F1;border-radius:var(--r);padding:12px 15px;font-size:12px;color:#1A5276}
+.info-box{background:var(--sky-bg);border:1px solid #AED6F1;border-radius:var(--r);padding:12px 15px;font-size:12px;color:#1A5276}
 .legend{display:flex;gap:14px;flex-wrap:wrap;padding:12px 16px;border-top:1px solid var(--border);background:#FAFBFC}
 .legend-item{display:flex;align-items:center;gap:6px;font-size:12px}
 #toast{position:fixed;bottom:20px;right:20px;background:var(--primary);color:#fff;padding:10px 18px;border-radius:6px;font-size:13px;font-weight:600;box-shadow:0 4px 14px rgba(0,0,0,.22);z-index:3000;opacity:0;transition:opacity 250ms;pointer-events:none}
@@ -175,26 +183,26 @@ textarea.form-control{resize:vertical;min-height:64px}
 .auth-box input[type=password]{width:100%;padding:10px 14px;border:1.5px solid var(--border);border-radius:6px;font-size:15px;font-family:var(--font);outline:none;margin-bottom:14px;transition:border-color 120ms}
 .auth-box input[type=password]:focus{border-color:var(--accent)}
 .auth-btn{width:100%;padding:11px;background:var(--accent);color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:700;cursor:pointer;font-family:var(--font);transition:background 120ms}
-.auth-btn:hover{background:#1A6FA8}
+.auth-btn:hover{background:var(--sage-700)}
 .auth-err{color:var(--danger);font-size:12px;margin-top:8px;min-height:18px;font-weight:600}
 .auth-change{font-size:11px;color:var(--muted);margin-top:14px;cursor:pointer;text-decoration:underline}
 .auth-change:hover{color:var(--accent)}
 /* ── STRAORDINARI BADGE ── */
-.shift-chip.overtime{border-left-color:#C0392B;background:#FDEDEC;box-shadow:inset 0 0 0 1px #F5B7B1}
-.shift-chip.overtime .shift-time{color:#922B21}
-.badge-ot{background:#FDEBD0;color:#784212;font-size:10px;font-weight:700;padding:1px 5px;border-radius:8px;display:inline-block;margin-top:2px}
+.shift-chip.overtime{border-left-color:var(--clay-text);background:var(--clay-bg);box-shadow:inset 0 0 0 1px #DCC7C4}
+.shift-chip.overtime .shift-time{color:var(--clay-text)}
+.badge-ot{background:var(--sand-bg);color:var(--sand-text);font-size:10px;font-weight:700;padding:1px 5px;border-radius:8px;display:inline-block;margin-top:2px}
 /* ── CHECK ORARI: TAB + COPERTURA AREE ── */
 .co-tab-btn{background:#fff;border:1px solid var(--border);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;font-weight:700;color:var(--muted);transition:all 120ms}
 .co-tab-btn:hover{border-color:var(--accent);color:var(--accent)}
 .co-tab-btn.active{background:var(--primary);border-color:var(--primary);color:#fff}
 .cov-bar{display:flex;height:20px;border-radius:3px;overflow:hidden;border:1px solid var(--border);margin:3px 0}
-.cov-seg-ok{background:#27AE60}
-.cov-seg-gap{background:repeating-linear-gradient(45deg,#E74C3C,#E74C3C 5px,#C0392B 5px,#C0392B 10px);cursor:pointer}
+.cov-seg-ok{background:var(--sage-500)}
+.cov-seg-gap{background:repeating-linear-gradient(45deg,var(--clay),var(--clay) 5px,var(--clay-text) 5px,var(--clay-text) 10px);cursor:pointer}
 .cov-times{display:flex;justify-content:space-between;font-size:9px;color:var(--muted);margin-top:1px}
-.gap-chip{display:inline-flex;align-items:center;gap:5px;background:#FDEDEC;border:1px solid #F5B7B1;color:#922B21;font-size:11px;font-weight:600;padding:3px 8px;border-radius:12px;margin:2px 4px 2px 0;cursor:pointer}
-.gap-chip:hover{background:#FADBD8}
-.day-highlight{outline:3px solid #E67E22 !important;outline-offset:-2px;animation:dayPulse 1.4s ease-in-out 0s 2}
-@keyframes dayPulse{0%,100%{background-color:transparent}50%{background-color:#FEF0E0}}
+.gap-chip{display:inline-flex;align-items:center;gap:5px;background:var(--clay-bg);border:1px solid #DCC7C4;color:var(--clay-text);font-size:11px;font-weight:600;padding:3px 8px;border-radius:12px;margin:2px 4px 2px 0;cursor:pointer}
+.gap-chip:hover{background:#EFDCDA}
+.day-highlight{outline:3px solid var(--sand) !important;outline-offset:-2px;animation:dayPulse 1.4s ease-in-out 0s 2}
+@keyframes dayPulse{0%,100%{background-color:transparent}50%{background-color:var(--sand-bg)}}
 </style>
 </head>
 <body>
@@ -248,7 +256,7 @@ textarea.form-control{resize:vertical;min-height:64px}
     <div class="table-wrap">
       <table>
         <thead><tr>
-          <th>Nome</th><th>Contratto</th><th>Caratteristiche</th>
+          <th>Nome</th><th>Turni fissi</th><th>Caratteristiche</th>
           <th>Periodi Ferie</th><th>Assenze/Permessi</th>
           <th style="width:90px">Azioni</th>
         </tr></thead>
@@ -336,7 +344,7 @@ textarea.form-control{resize:vertical;min-height:64px}
         </div>
       </div>
 
-      <div class="form-group mb-16" style="background:#F8F9FA;border:1px solid var(--border);border-radius:6px;padding:14px">
+      <div class="form-group mb-16" style="background:var(--sage-50);border:1px solid var(--border);border-radius:6px;padding:14px">
         <label class="form-label">🚚 Giorni con arrivo camion (il dipendente camion inizia alle 07:00 e lavora almeno fino all'apertura)</label>
         <div class="check-group mt-8" id="camionDaysGroup"></div>
         <button class="btn btn-secondary btn-sm mt-8" onclick="saveCamionDays()">💾 Salva</button>
@@ -399,8 +407,8 @@ textarea.form-control{resize:vertical;min-height:64px}
       </div>
     </div>
     <!-- Archive selector bar -->
-    <div class="mw-bar" id="archiveBar" style="display:none;border-bottom:2px solid #FDEBD0">
-      <span class="text-xs fw-700" style="color:#784212">📦 ARCHIVIO:</span>
+    <div class="mw-bar" id="archiveBar" style="display:none;border-bottom:2px solid var(--sand-bg)">
+      <span class="text-xs fw-700" style="color:var(--sand-text)">📦 ARCHIVIO:</span>
       <select class="form-control" id="archiveSelect" onchange="switchScheduleSource(this.value)" style="width:auto;max-width:320px;font-size:12px;padding:4px 8px"></select>
       <button class="btn btn-danger btn-sm" id="deleteArchiveBtn" onclick="deleteCurrentArchive()" style="display:none">🗑 Elimina Archivio</button>
       <span class="text-xs text-muted" id="archiveReadonly" style="display:none">📖 Sola lettura</span>
@@ -454,7 +462,7 @@ textarea.form-control{resize:vertical;min-height:64px}
 const DAYS_KEY  = ['mon','tue','wed','thu','fri','sat','sun'];
 const DAYS_FULL = ['Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato','Domenica'];
 const DAYS_SHORT= ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
-const PALETTE   = ['#E74C3C','#E67E22','#F39C12','#2ECC71','#1ABC9C','#3498DB','#9B59B6','#E91E63','#FF5722','#607D8B','#27AE60','#2980B9','#8E44AD','#D35400'];
+const PALETTE   = ['#8AA88F','#6E8F76','#A8BFA4','#7E9B8E','#96A88A','#7C93A6','#9D8CA8','#B57F72','#C2A878','#A9AF9C','#8C9A93','#B9A48C','#A88C7D','#6F8390'];
 const MIN_SHIFT_M = 240; // durata minima turno: 4 ore (in minuti)
 
 /* ═══════════════ DEFAULT STATE ═══════════════ */
@@ -462,9 +470,9 @@ function defaultState(){
   return {
     storeName:'Acqua & Sapone',
     areas:[
-      {id:uid(),name:'Magazzino-Vendita',color:'#27AE60',minCoverage:1,notes:'Magazzino e area vendita prodotti'},
-      {id:uid(),name:'Profumeria',       color:'#8E44AD',minCoverage:1,notes:'Area profumeria e cosmesi'},
-      {id:uid(),name:'Cassa',            color:'#E74C3C',minCoverage:1,notes:'Cassa e checkout clienti'},
+      {id:uid(),name:'Magazzino-Vendita',color:'#8AA88F',minCoverage:1,notes:'Magazzino e area vendita prodotti'},
+      {id:uid(),name:'Profumeria',       color:'#9D8CA8',minCoverage:1,notes:'Area profumeria e cosmesi'},
+      {id:uid(),name:'Cassa',            color:'#B57F72',minCoverage:1,notes:'Cassa e checkout clienti'},
     ],
     employees:[],
     storeHours:{
@@ -629,9 +637,9 @@ async function changePasswordModal() {
 function setSyncStatus(s){
   const el=document.getElementById('syncStatus');if(!el)return;
   if(s==='saving'){el.textContent='⏳ Salvataggio...';el.style.color='var(--muted)'}
-  else if(s==='saved'){el.textContent='☁️ Salvato';el.style.color='#1E8449';setTimeout(()=>{el.textContent=''},2500)}
-  else if(s==='error'){el.textContent='⚠️ Errore cloud';el.style.color='#C0392B'}
-  else if(s==='offline'){el.textContent='📴 Offline (locale)';el.style.color='#E67E22'}
+  else if(s==='saved'){el.textContent='☁️ Salvato';el.style.color='var(--sage-700)';setTimeout(()=>{el.textContent=''},2500)}
+  else if(s==='error'){el.textContent='⚠️ Errore cloud';el.style.color='var(--clay-text)'}
+  else if(s==='offline'){el.textContent='📴 Offline (locale)';el.style.color='var(--sand)'}
 }
 
 let _saveTimer=null;
@@ -691,7 +699,6 @@ async function loadFromSupabase(){
 function t2m(t){if(!t)return 0;const[h,m]=t.split(':').map(Number);return h*60+(m||0)}
 function m2t(m){return String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0')}
 function shiftH(s,e){return Math.max(0,(t2m(e)-t2m(s))/60)}
-function dayH(sh){if(!sh||!sh.open)return 0;if(sh.type==='continuous')return(t2m(sh.ae)-t2m(sh.ms))/60;return(t2m(sh.me)-t2m(sh.ms))/60+(t2m(sh.ae)-t2m(sh.as))/60}
 function getMonday(d){const dt=new Date(d);const day=dt.getDay();const diff=day===0?-6:1-day;dt.setDate(dt.getDate()+diff);dt.setHours(0,0,0,0);return dt}
 function addDays(d,n){const dt=new Date(d);dt.setDate(dt.getDate()+n);return dt}
 function isoDate(d){
@@ -761,9 +768,8 @@ function renderEmployees(){
     const chars=[];
     if(e.isDirectore)chars.push('<span class="badge b-gray">👔 Direttore</span>');
     if(e.isProfumeria)chars.push('<span class="badge b-purple">🌸 Profumeria</span>');
-    if(e.canOpenStore)chars.push('<span class="badge b-blue">🔑 Apertura</span>');
     if(e.takesMorningDelivery)chars.push('<span class="badge b-yellow">🚚 Camion 7:00</span>');
-    if(e.canCloseStore)chars.push('<span class="badge b-purple">🔐 Chiusura</span>');
+    if(e.canCloseStore)chars.push('<span class="badge b-blue">🔐 Chiusura</span>');
     (e.customChars||[]).forEach(c=>chars.push(`<span class="badge b-gray">${esc(c)}</span>`));
     const vacPills=(e.vacations||[]).map(v=>`<span class="vac-pill">${v.from} – ${v.to}${v.note?' ('+esc(v.note)+')':''}</span>`).join('');
     const doff=(e.daysOff||[]).map(d=>`<span class="day-pill">${d}</span>`).join(' ');
@@ -2149,7 +2155,7 @@ function eseguiControlli(sch){
       : contratto;
     const fatte=Math.round(oreDi(emp.id)*10)/10;
     if(fatte<atteso-0.05)
-      sotto.push(`<strong>${esc(emp.name)}</strong>: ${fatte}h su ${atteso}h ${giorniFerie?`(contratto ${contratto}h ridotto per ${giorniFerie} giorni di assenza)`:'di contratto'} — <span style="color:#C0392B">mancano ${Math.round((atteso-fatte)*10)/10}h</span>`);
+      sotto.push(`<strong>${esc(emp.name)}</strong>: ${fatte}h su ${atteso}h ${giorniFerie?`(contratto ${contratto}h ridotto per ${giorniFerie} giorni di assenza)`:'di contratto'} — <span style="color:var(--clay-text)">mancano ${Math.round((atteso-fatte)*10)/10}h</span>`);
   });
   controlli.push({titolo:'1. Ore da contratto completate',ok:!sotto.length,
     righe:sotto.length?sotto:['Tutti i dipendenti raggiungono le ore previste dal contratto.']});
@@ -2164,7 +2170,7 @@ function eseguiControlli(sch){
       let perCopertura=0;
       openDays.forEach(k=>turniDi(k,emp.id).forEach(s=>{if(s.coperturaExtra)perCopertura+=s.hours||0}));
       perCopertura=Math.round(perCopertura*10)/10;
-      extra.push(`<strong>${esc(emp.name)}</strong>: <span style="color:#C0392B">+${Math.round((fatte-contratto)*10)/10}h</span> oltre le ${contratto}h di contratto${perCopertura>0?` (di cui ${perCopertura}h per coprire il negozio)`:''}`);
+      extra.push(`<strong>${esc(emp.name)}</strong>: <span style="color:var(--clay-text)">+${Math.round((fatte-contratto)*10)/10}h</span> oltre le ${contratto}h di contratto${perCopertura>0?` (di cui ${perCopertura}h per coprire il negozio)`:''}`);
     }
   });
   controlli.push({titolo:'2. Straordinari',ok:true,neutro:!extra.length,
@@ -2179,7 +2185,7 @@ function eseguiControlli(sch){
     if(t2m(sh.ms)<=t2m('07:00'))return;           // il negozio apre già alle 07:00
     giorniCamion++;
     const chi=(sch.days[k].shifts||[]).filter(s=>t2m(s.startTime)<=t2m('07:00'));
-    if(!chi.length) camion.push(`<strong>${nome(k)}</strong>: <span style="color:#C0392B">nessuno in turno alle 07:00</span>`);
+    if(!chi.length) camion.push(`<strong>${nome(k)}</strong>: <span style="color:var(--clay-text)">nessuno in turno alle 07:00</span>`);
     else camion.push(`<strong>${nome(k)}</strong>: ${chi.map(s=>{const e=getEmp(s.employeeId);return (e?esc(e.name):'?')+' '+s.startTime+'–'+s.endTime}).join(', ')} ✓`);
   });
   controlli.push({titolo:'3. Copertura camion (dalle 07:00)',
@@ -2202,10 +2208,10 @@ function eseguiControlli(sch){
         coperture.sort((p,q)=>p[0]-q[0]);
         let cursore=a;
         coperture.forEach(([x,y])=>{
-          if(x>cursore)buchiProf.push(`<strong>${nome(k)}</strong> ${m2t(cursore)}–${m2t(x)} <span style="color:#C0392B">senza esperta di profumeria</span>`);
+          if(x>cursore)buchiProf.push(`<strong>${nome(k)}</strong> ${m2t(cursore)}–${m2t(x)} <span style="color:var(--clay-text)">senza esperta di profumeria</span>`);
           cursore=Math.max(cursore,y);
         });
-        if(cursore<b)buchiProf.push(`<strong>${nome(k)}</strong> ${m2t(cursore)}–${m2t(b)} <span style="color:#C0392B">senza esperta di profumeria</span>`);
+        if(cursore<b)buchiProf.push(`<strong>${nome(k)}</strong> ${m2t(cursore)}–${m2t(b)} <span style="color:var(--clay-text)">senza esperta di profumeria</span>`);
       });
     });
   }
@@ -2229,7 +2235,7 @@ function eseguiControlli(sch){
         const e=getEmp(chi[0].employeeId);
         chiusure.push(`<strong>${nome(k)}</strong> ${m2t(da)}–${m2t(fine)}: ${esc(e.name)} ✓`);
       } else {
-        chiusure.push(`<strong>${nome(k)}</strong> ${m2t(da)}–${m2t(fine)}: <span style="color:#C0392B">nessun addetto abilitato alla chiusura</span>`);
+        chiusure.push(`<strong>${nome(k)}</strong> ${m2t(da)}–${m2t(fine)}: <span style="color:var(--clay-text)">nessun addetto abilitato alla chiusura</span>`);
       }
     });
   }
@@ -2248,14 +2254,14 @@ function eseguiControlli(sch){
       const camion=a0<=t2m('07:00')&&b0<=Math.max(...fasce.map(f=>f[1]));
       if(!dentro&&!camion){
         const e=getEmp(s0.employeeId);
-        fuoriOrario.push(`<strong>${nome(k)}</strong> ${esc(e?e.name:'?')} ${s0.startTime}–${s0.endTime} — <span style="color:#C0392B">fuori dall'orario di apertura (${fasce.map(([x,y])=>m2t(x)+'–'+m2t(y)).join(' / ')})</span>`);
+        fuoriOrario.push(`<strong>${nome(k)}</strong> ${esc(e?e.name:'?')} ${s0.startTime}–${s0.endTime} — <span style="color:var(--clay-text)">fuori dall'orario di apertura (${fasce.map(([x,y])=>m2t(x)+'–'+m2t(y)).join(' / ')})</span>`);
       }
     });
   });
   // turni assegnati in giorni di chiusura
   DAYS_KEY.filter(k=>sch.days[k]&&!openDays.includes(k)).forEach(k=>{
     const n=(sch.days[k].shifts||[]).length;
-    if(n)fuoriOrario.push(`<strong>${nome(k)}</strong>: ${n} turni assegnati ma il negozio è <span style="color:#C0392B">chiuso</span>`);
+    if(n)fuoriOrario.push(`<strong>${nome(k)}</strong>: ${n} turni assegnati ma il negozio è <span style="color:var(--clay-text)">chiuso</span>`);
   });
   controlli.push({titolo:'6. Turni dentro l\'orario di apertura',ok:!fuoriOrario.length,
     righe:fuoriOrario.length?fuoriOrario
@@ -2292,12 +2298,12 @@ function openCheckOrari(){
     let status,statusColor,extra='',effectiveContract=contract;
 
     if(fullVacation){
-      status='🏖 In ferie';statusColor='#C0392B';extra='ferie intera settimana';
+      status='🏖 In ferie';statusColor='var(--clay-text)';extra='ferie intera settimana';
       return {emp,totH,contract,effectiveContract:0,status,statusColor,extra,isVacation:true};
     }
 
     if(contract<=0){
-      status='Orario fisso';statusColor='#5D6D7E';extra=`${totH}h assegnate`;
+      status='Orario fisso';statusColor='var(--muted)';extra=`${totH}h assegnate`;
       return {emp,totH,contract,effectiveContract:0,status,statusColor,extra};
     }
 
@@ -2307,17 +2313,17 @@ function openCheckOrari(){
     }
 
     const diff=Math.round((totH-effectiveContract)*10)/10;
-    if(diff>0.05){status=`+${diff}h straordinario`;statusColor='#E67E22';extra=partialVacation?`oltre contratto ridotto (${vacDays}gg ferie)`:'🔶 oltre contratto'}
-    else if(diff<-0.05){status=`${Math.abs(diff)}h in meno`;statusColor='#C0392B';extra=partialVacation?`carenza su contratto ridotto (${vacDays}gg ferie)`:'🔻 carenza'}
-    else{status='✓ Completo';statusColor='#1E8449';extra=partialVacation?`completo (${vacDays}gg ferie, contratto ${effectiveContract}h)`:'in linea col contratto'}
+    if(diff>0.05){status=`+${diff}h straordinario`;statusColor='var(--sand)';extra=partialVacation?`oltre contratto ridotto (${vacDays}gg ferie)`:'🔶 oltre contratto'}
+    else if(diff<-0.05){status=`${Math.abs(diff)}h in meno`;statusColor='var(--clay-text)';extra=partialVacation?`carenza su contratto ridotto (${vacDays}gg ferie)`:'🔻 carenza'}
+    else{status='✓ Completo';statusColor='var(--sage-700)';extra=partialVacation?`completo (${vacDays}gg ferie, contratto ${effectiveContract}h)`:'in linea col contratto'}
     return {emp,totH,contract,effectiveContract,status,statusColor,extra,partialVacation,vacDays};
   });
 
   const tableRows=rows.map(r=>{
-    const contractLbl=r.isVacation?'<span style="color:#C0392B">Ferie</span>':(r.contract>0?(r.partialVacation?`${r.contract}h → ${r.effectiveContract}h`:`${r.contract}h`):'Fisso');
+    const contractLbl=r.isVacation?'<span style="color:var(--clay-text)">Ferie</span>':(r.contract>0?(r.partialVacation?`${r.contract}h → ${r.effectiveContract}h`:`${r.contract}h`):'Fisso');
     const cmpContract=r.effectiveContract>0?r.effectiveContract:r.contract;
     const pct=cmpContract>0?Math.min((r.totH/cmpContract)*100,150):0;
-    const barColor=r.totH>cmpContract?'#E67E22':(r.totH<cmpContract*0.99?'#C0392B':'#1E8449');
+    const barColor=r.totH>cmpContract?'var(--sand)':(r.totH<cmpContract*0.99?'var(--clay-text)':'var(--sage-700)');
     return `<tr>
       <td><strong>${esc(r.emp.name)}</strong></td>
       <td>${contractLbl}</td>
@@ -2341,7 +2347,7 @@ function openCheckOrari(){
 
   const quickListHtml=flatGaps.length?flatGaps.map(g=>
     `<span class="gap-chip" onclick="jumpToDay('${g.dayKey}')">⚠️ ${DAYS_FULL[g.dayIdx]} ${fmtShort(addDays(ws,g.dayIdx))} · ${esc(g.area.name)} · ${m2t(g.s)}–${m2t(g.e)} <span style="opacity:.75">🔧 vai</span></span>`
-  ).join(''):`<div class="alert" style="background:#EAFAF1;border-color:#A9DFBF;color:#1E8449;font-weight:600">✓ Nessuna fascia scoperta questa settimana — tutte le aree sono coperte durante l'orario di apertura.</div>`;
+  ).join(''):`<div class="alert" style="background:var(--sage-100);border-color:var(--sage-300);color:var(--sage-700);font-weight:600">✓ Nessuna fascia scoperta questa settimana — tutte le aree sono coperte durante l'orario di apertura.</div>`;
 
   const dayCardsHtml=DAYS_KEY.map((dayKey,dayIdx)=>{
     const sh0=S.storeHours[dayKey];
@@ -2364,13 +2370,13 @@ function openCheckOrari(){
       return `<tr>
         <td style="white-space:nowrap;vertical-align:top;padding-top:8px"><span style="width:10px;height:10px;background:${c.area.color};border-radius:2px;display:inline-block;margin-right:5px"></span>${esc(c.area.name)}</td>
         <td style="min-width:220px">${barsHtml}</td>
-        <td style="min-width:130px;vertical-align:top;padding-top:6px">${gapList||'<span style="color:#1E8449;font-size:11px">✓ coperta</span>'}</td>
+        <td style="min-width:130px;vertical-align:top;padding-top:6px">${gapList||'<span style="color:var(--sage-700);font-size:11px">✓ coperta</span>'}</td>
       </tr>`;
     }).join('');
     return `<div style="margin-bottom:16px;border:1px solid var(--border);border-radius:8px;overflow:hidden">
-      <div style="background:${dayHasGaps?'#FDEDEC':'#EAFAF1'};padding:8px 12px;font-weight:700;font-size:13px;display:flex;justify-content:space-between;align-items:center">
+      <div style="background:${dayHasGaps?'var(--clay-bg)':'var(--sage-100)'};padding:8px 12px;font-weight:700;font-size:13px;display:flex;justify-content:space-between;align-items:center">
         <span>${DAYS_FULL[dayIdx]} ${fmtShort(addDays(ws,dayIdx))}</span>
-        ${dayHasGaps?'<span style="font-size:11px;color:#C0392B">⚠️ fasce scoperte</span>':'<span style="font-size:11px;color:#1E8449">✓ tutto coperto</span>'}
+        ${dayHasGaps?'<span style="font-size:11px;color:var(--clay-text)">⚠️ fasce scoperte</span>':'<span style="font-size:11px;color:var(--sage-700)">✓ tutto coperto</span>'}
       </div>
       <table style="width:100%;border-collapse:collapse"><tbody>${areaRows}</tbody></table>
     </div>`;
@@ -2380,10 +2386,10 @@ function openCheckOrari(){
   const controlli=eseguiControlli(sch);
   const kos=controlli.filter(c=>!c.ok).length;
   const controlliHtml=controlli.map(c=>{
-    const stato=c.ok?(c.neutro?'#5D6D7E':'#1E8449'):'#C0392B';
+    const stato=c.ok?(c.neutro?'var(--muted)':'var(--sage-700)'):'var(--clay-text)';
     const icona=c.ok?(c.neutro?'—':'✓'):'✕';
-    const sfondo=c.ok?(c.neutro?'#F4F6F7':'#EAFAF1'):'#FDEDEC';
-    const bordo =c.ok?(c.neutro?'#D5DBDB':'#A9DFBF'):'#F5B7B1';
+    const sfondo=c.ok?(c.neutro?'var(--surface)':'var(--sage-100)'):'var(--clay-bg)';
+    const bordo =c.ok?(c.neutro?'var(--border)':'var(--sage-300)'):'#DCC7C4';
     return `<div style="border:1px solid ${bordo};background:${sfondo};border-radius:8px;padding:10px 12px;margin-bottom:10px">
       <div style="font-weight:700;font-size:13px;color:${stato};margin-bottom:6px">${icona} ${c.titolo}</div>
       <ul style="margin:0;padding-left:18px;line-height:1.7;font-size:12px">${c.righe.map(r=>`<li>${r}</li>`).join('')}</ul>
@@ -2394,9 +2400,9 @@ function openCheckOrari(){
     <div class="modal-header"><div class="modal-title">📊 Check Orari — Sett. ${idx+1} (${weekRange(sch.weekStart)})</div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
       <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
-        <button class="co-tab-btn active" id="coBtnRules" onclick="switchCheckOrariTab('rules')">✅ Controlli${kos?` <span style="background:#E74C3C;color:#fff;border-radius:8px;padding:0 6px;font-size:10px;margin-left:2px">${kos}</span>`:''}</button>
+        <button class="co-tab-btn active" id="coBtnRules" onclick="switchCheckOrariTab('rules')">✅ Controlli${kos?` <span style="background:var(--clay);color:#fff;border-radius:8px;padding:0 6px;font-size:10px;margin-left:2px">${kos}</span>`:''}</button>
         <button class="co-tab-btn" id="coBtnHours" onclick="switchCheckOrariTab('hours')">👥 Ore Dipendenti</button>
-        <button class="co-tab-btn" id="coBtnCoverage" onclick="switchCheckOrariTab('coverage')">🗺️ Copertura Aree${flatGaps.length?` <span style="background:#E74C3C;color:#fff;border-radius:8px;padding:0 6px;font-size:10px;margin-left:2px">${flatGaps.length}</span>`:''}</button>
+        <button class="co-tab-btn" id="coBtnCoverage" onclick="switchCheckOrariTab('coverage')">🗺️ Copertura Aree${flatGaps.length?` <span style="background:var(--clay);color:#fff;border-radius:8px;padding:0 6px;font-size:10px;margin-left:2px">${flatGaps.length}</span>`:''}</button>
       </div>
 
       <div id="coTabRules">
@@ -2410,16 +2416,16 @@ function openCheckOrari(){
       <div id="coTabHours" style="display:none">
         <div class="alert alert-info" style="margin-bottom:14px">Calcolo basato sull'orario attuale, incluse le modifiche manuali. Le ore sono la somma effettiva dei turni assegnati questa settimana.</div>
         <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-          <div style="flex:1;min-width:120px;background:#F4F6F7;border-radius:6px;padding:10px;text-align:center">
+          <div style="flex:1;min-width:120px;background:var(--surface);border-radius:6px;padding:10px;text-align:center">
             <div style="font-size:20px;font-weight:700;color:var(--primary)">${Math.round(totalWorked*10)/10}h</div>
             <div style="font-size:11px;color:var(--muted)">Ore totali assegnate</div>
           </div>
-          <div style="flex:1;min-width:120px;background:#FEF0E0;border-radius:6px;padding:10px;text-align:center">
-            <div style="font-size:20px;font-weight:700;color:#E67E22">${Math.round(totalOT*10)/10}h</div>
+          <div style="flex:1;min-width:120px;background:var(--sand-bg);border-radius:6px;padding:10px;text-align:center">
+            <div style="font-size:20px;font-weight:700;color:var(--sand)">${Math.round(totalOT*10)/10}h</div>
             <div style="font-size:11px;color:var(--muted)">Straordinari totali</div>
           </div>
-          <div style="flex:1;min-width:120px;background:#FDEDEC;border-radius:6px;padding:10px;text-align:center">
-            <div style="font-size:20px;font-weight:700;color:#C0392B">${Math.round(totalDeficit*10)/10}h</div>
+          <div style="flex:1;min-width:120px;background:var(--clay-bg);border-radius:6px;padding:10px;text-align:center">
+            <div style="font-size:20px;font-weight:700;color:var(--clay-text)">${Math.round(totalDeficit*10)/10}h</div>
             <div style="font-size:11px;color:var(--muted)">Carenze totali</div>
           </div>
         </div>
@@ -2432,11 +2438,11 @@ function openCheckOrari(){
       <div id="coTabCoverage" style="display:none">
         <div class="alert alert-info" style="margin-bottom:14px">Fasce orarie in cui nessun dipendente risulta assegnato a un'area, durante l'orario di apertura del negozio. Clicca su una fascia scoperta (barra rossa tratteggiata o etichetta 🔧) per saltare direttamente a quel giorno nell'orario e correggerlo.</div>
         <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
-          <div style="flex:1;min-width:120px;background:${flatGaps.length?'#FDEDEC':'#EAFAF1'};border-radius:6px;padding:10px;text-align:center">
-            <div style="font-size:20px;font-weight:700;color:${flatGaps.length?'#C0392B':'#1E8449'}">${totalGapH}h</div>
+          <div style="flex:1;min-width:120px;background:${flatGaps.length?'var(--clay-bg)':'var(--sage-100)'};border-radius:6px;padding:10px;text-align:center">
+            <div style="font-size:20px;font-weight:700;color:${flatGaps.length?'var(--clay-text)':'var(--sage-700)'}">${totalGapH}h</div>
             <div style="font-size:11px;color:var(--muted)">Ore scoperte totali</div>
           </div>
-          <div style="flex:1;min-width:120px;background:#F4F6F7;border-radius:6px;padding:10px;text-align:center">
+          <div style="flex:1;min-width:120px;background:var(--surface);border-radius:6px;padding:10px;text-align:center">
             <div style="font-size:20px;font-weight:700;color:var(--primary)">${flatGaps.length}</div>
             <div style="font-size:11px;color:var(--muted)">Fasce scoperte</div>
           </div>
@@ -2574,7 +2580,7 @@ function renderSchedule(){
       const dayData=sch.days[key];
       const onVacDay=isOnVacationDay(emp,dayDate); // ferie QUEL giorno
 
-      if(closed){html+=`<td data-day="${key}"><div class="day-cell is-closed"><span style="font-size:10px;color:#ADB5BD">Chiuso</span></div></td>`;return}
+      if(closed){html+=`<td data-day="${key}"><div class="day-cell is-closed"><span style="font-size:10px;color:var(--muted)">Chiuso</span></div></td>`;return}
       if(!dayData){html+=`<td data-day="${key}"><div class="day-cell"></div></td>`;return}
 
       const isOff=dayData.dayOff&&dayData.dayOff.includes(emp.id);
@@ -2586,27 +2592,27 @@ function renderSchedule(){
       const cursor=isReadOnly?'cursor:default':'';
 
       // Ferie: cliccabile per correzione manuale (mostra turni se ce ne sono dopo modifica manuale)
-      if(onVacDay&&!shifts.length){html+=`<td data-day="${key}"><div class="day-cell is-vacation" ${clickFn} style="${cursor}"><span class="cell-lbl" style="color:#922B21">FERIE</span></div></td>`;return}
-      if(isAbs&&!shifts.length){html+=`<td data-day="${key}"><div class="day-cell is-absence" ${clickFn} style="${cursor}"><span class="cell-lbl" style="color:#721C24">Assenza</span></div></td>`;return}
-      if(isPerm&&!shifts.length){html+=`<td data-day="${key}"><div class="day-cell is-perm" ${clickFn} style="${cursor}"><span class="cell-lbl" style="color:#0C5460">Permesso</span></div></td>`;return}
-      if(isOff&&!shifts.length){html+=`<td data-day="${key}"><div class="day-cell is-dayoff" ${clickFn} style="${cursor}"><span class="cell-lbl" style="color:#856404">Riposo</span></div></td>`;return}
+      if(onVacDay&&!shifts.length){html+=`<td data-day="${key}"><div class="day-cell is-vacation" ${clickFn} style="${cursor}"><span class="cell-lbl" style="color:var(--clay-text)">FERIE</span></div></td>`;return}
+      if(isAbs&&!shifts.length){html+=`<td data-day="${key}"><div class="day-cell is-absence" ${clickFn} style="${cursor}"><span class="cell-lbl" style="color:var(--clay-text)">Assenza</span></div></td>`;return}
+      if(isPerm&&!shifts.length){html+=`<td data-day="${key}"><div class="day-cell is-perm" ${clickFn} style="${cursor}"><span class="cell-lbl" style="color:var(--sky-text)">Permesso</span></div></td>`;return}
+      if(isOff&&!shifts.length){html+=`<td data-day="${key}"><div class="day-cell is-dayoff" ${clickFn} style="${cursor}"><span class="cell-lbl" style="color:var(--warn-text)">Riposo</span></div></td>`;return}
 
       if(!shifts.length){
         // Giornata lavorativa senza turno: NON è un riposo (il riposo è uno solo a settimana).
         // Va etichettata in modo esplicito per non confonderla con il giorno di riposo.
-        html+=`<td data-day="${key}"><div class="day-cell" ${clickFn} style="${cursor}"><span class="cell-lbl" style="color:#ADB5BD;font-size:10px">Nessun turno</span>${isReadOnly?'':' <div class="add-shift">+ Aggiungi</div>'}</div></td>`;
+        html+=`<td data-day="${key}"><div class="day-cell" ${clickFn} style="${cursor}"><span class="cell-lbl" style="color:var(--muted);font-size:10px">Nessun turno</span>${isReadOnly?'':' <div class="add-shift">+ Aggiungi</div>'}</div></td>`;
         return;
       }
 
       const shiftsHtml=shifts.map(s=>{
-        const area=getArea(s.areaId);const color=area?area.color:'#3498DB';
-        const otBadge=s.overtime?`<div class="badge-ot" style="background:#F5B7B1;color:#7B241C">📌 STRAORDINARIO${s.coperturaExtra?' (copertura)':''}</div>`:'';
-        const sunBadge=s.sundayFull?'<div class="badge-ot" style="background:#D6EAF8;color:#1B4F72">☀️ Turno domenica</div>':'';
-        const ovlBadge=s.sovrapposto?'<div class="badge-ot" style="background:#FDEBD0;color:#7E5109">👥 Sovrapposizione</div>':'';
-        const camBadge=s.camion?'<div class="badge-ot" style="background:#FCF3CF;color:#7D6608">🚚 Camion 07:00</div>':'';
-        const clsBadge=s.chiusura?'<div class="badge-ot" style="background:#E8DAEF;color:#5B2C6F">🔐 Chiusura</div>':'';
-        const gapBadge=s.directorGap?'<div class="badge-ot" style="background:#E8DAEF;color:#5B2C6F">🔧 Copertura direttore</div>':'';
-        const prefBadge=s.preferred?'<div class="badge-ot" style="background:#FCF3CF;color:#7D6608">⭐ Preferenza</div>':'';
+        const area=getArea(s.areaId);const color=area?area.color:'var(--sky)';
+        const otBadge=s.overtime?`<div class="badge-ot" style="background:#DCC7C4;color:var(--clay-text)">📌 STRAORDINARIO${s.coperturaExtra?' (copertura)':''}</div>`:'';
+        const sunBadge=s.sundayFull?'<div class="badge-ot" style="background:var(--sky-bg);color:var(--primary)">☀️ Turno domenica</div>':'';
+        const ovlBadge=s.sovrapposto?'<div class="badge-ot" style="background:var(--sand-bg);color:var(--sand-text)">👥 Sovrapposizione</div>':'';
+        const camBadge=s.camion?'<div class="badge-ot" style="background:var(--sand-bg);color:var(--sand-text)">🚚 Camion 07:00</div>':'';
+        const clsBadge=s.chiusura?'<div class="badge-ot" style="background:var(--plum-bg);color:var(--plum-text)">🔐 Chiusura</div>':'';
+        const gapBadge=s.directorGap?'<div class="badge-ot" style="background:var(--plum-bg);color:var(--plum-text)">🔧 Copertura direttore</div>':'';
+        const prefBadge=s.preferred?'<div class="badge-ot" style="background:var(--sand-bg);color:var(--sand-text)">⭐ Preferenza</div>':'';
         return `<div class="shift-chip ${s.overtime?'overtime':''}" style="border-left-color:${color}"><div class="shift-time">${s.startTime}–${s.endTime}</div><div class="shift-area">${area?esc(area.name):'—'}</div>${otBadge}${sunBadge}${ovlBadge}${camBadge}${clsBadge}${gapBadge}${prefBadge}</div>`;
       }).join('');
 
@@ -2618,14 +2624,14 @@ function renderSchedule(){
   html+=`</tbody></table></div>`;
   html+=`<div class="legend"><span class="text-xs fw-700 text-muted">AREE:</span>
     ${S.areas.map(a=>`<span class="legend-item"><span style="width:12px;height:12px;background:${a.color};border-radius:2px;display:inline-block"></span>${esc(a.name)}</span>`).join('')}
-    <span class="legend-item"><span style="width:12px;height:12px;background:#FFFBF0;border:1px solid #FFEEBA;border-radius:2px;display:inline-block"></span>Riposo</span>
-    <span class="legend-item"><span style="width:12px;height:12px;background:#FFF;border:1px solid #DEE2E6;border-radius:2px;display:inline-block"></span>Nessun turno (non è riposo)</span>
+    <span class="legend-item"><span style="width:12px;height:12px;background:var(--sage-50);border:1px solid var(--sage-200);border-radius:2px;display:inline-block"></span>Riposo</span>
+    <span class="legend-item"><span style="width:12px;height:12px;background:#FFF;border:1px solid var(--border);border-radius:2px;display:inline-block"></span>Nessun turno (non è riposo)</span>
     <span class="legend-item">🚚 Camion (apertura 07:00)</span>
     <span class="legend-item">🔐 Abilitato alla chiusura</span>
-    <span class="legend-item"><span style="width:12px;height:12px;background:#FDEDEC;border:1px solid #C0392B;border-radius:2px;display:inline-block"></span>Straordinario (ore fuori contratto)</span>
+    <span class="legend-item"><span style="width:12px;height:12px;background:var(--clay-bg);border:1px solid var(--clay-text);border-radius:2px;display:inline-block"></span>Straordinario (ore fuori contratto)</span>
     <span class="legend-item">👥 Turno sovrapposto (per completare le ore)</span>
-    <span class="legend-item"><span style="width:12px;height:12px;background:#FEF0F0;border:1px solid #F5C6CB;border-radius:2px;display:inline-block"></span>Assenza</span>
-    <span class="legend-item"><span style="width:12px;height:12px;background:#FFF5F5;border:1px solid #FADBD8;border-radius:2px;display:inline-block"></span>Ferie</span>
+    <span class="legend-item"><span style="width:12px;height:12px;background:var(--clay-bg);border:1px solid #DCC7C4;border-radius:2px;display:inline-block"></span>Assenza</span>
+    <span class="legend-item"><span style="width:12px;height:12px;background:var(--clay-bg);border:1px solid #EFDCDA;border-radius:2px;display:inline-block"></span>Ferie</span>
   </div>`;
 
   el.innerHTML=html;
@@ -2886,7 +2892,7 @@ function refreshEmergencyInfo(){
     <div style="font-size:13px;font-weight:700;margin-bottom:10px;color:var(--primary)">Assegna copertura per ogni area scoperta:</div>
     ${removedShifts.map((s,i)=>{
       const area=getArea(s.areaId);
-      const color=area?area.color:'#3498DB';
+      const color=area?area.color:'var(--sky)';
       const substOpts=buildSubstOpts(s);
       return `<div class="uncover-row">
         <div class="uncover-area">
@@ -3038,7 +3044,6 @@ function openEmpModal(id){
         <div class="check-group mt-8">
           <label class="check-item"><input type="checkbox" id="eDir" ${emp&&emp.isDirectore?'checked':''}> 👔 Direttore (domenica sempre libera)</label>
           <label class="check-item"><input type="checkbox" id="eProf" ${emp&&emp.isProfumeria?'checked':''}> 🌸 Specializzato Profumeria</label>
-          <label class="check-item"><input type="checkbox" id="eOpen" ${emp&&emp.canOpenStore?'checked':''}> 🔑 Abilitato Apertura</label>
           <label class="check-item"><input type="checkbox" id="eCamion" ${emp&&emp.takesMorningDelivery?'checked':''}> 🚚 Prende Camion (7:00)</label>
           <label class="check-item"><input type="checkbox" id="eClose" ${emp&&emp.canCloseStore?'checked':''}> 🔐 Abilitato Chiusura (codice allarme)</label>
         </div>
@@ -3349,7 +3354,6 @@ function saveEmp(existId){
     isDirectore:document.getElementById('eDir').checked,
     isProfumeria:document.getElementById('eProf').checked,
     canCloseStore:document.getElementById('eClose').checked,
-    canOpenStore:document.getElementById('eOpen').checked,
     takesMorningDelivery:document.getElementById('eCamion').checked,
     customChars:cc,
     vacations:collectVacations(),
