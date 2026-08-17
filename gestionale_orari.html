@@ -112,11 +112,12 @@ textarea.form-control{resize:vertical;min-height:64px}
 .mw-info{font-size:12px;color:var(--muted);margin-left:auto}
 /* ── SCHEDULE GRID ── */
 .sch-grid{overflow-x:auto}
-.sch-table{border-collapse:collapse;min-width:860px;width:100%}
-.sch-table th{background:var(--primary);color:#fff;padding:9px 8px;text-align:center;font-size:12px;font-weight:600;min-width:100px}
+.sch-table{border-collapse:collapse;min-width:1120px;width:100%}
+.sch-table th{background:var(--primary);color:#fff;padding:9px 8px;text-align:center;font-size:12px;font-weight:600;min-width:140px}
 .sch-table th.emp-col{text-align:left;min-width:150px}
 .sch-table td{padding:0;border:1px solid var(--border);vertical-align:top}
 .sch-table td.emp-cell{padding:8px 10px;background:var(--sage-50);min-width:150px;border-left:none}
+.day-th-split{display:flex;justify-content:space-between;font-size:8px;font-weight:400;opacity:.75;margin-top:2px;padding:0 1px}
 .day-cell{min-height:60px;padding:5px;cursor:pointer;transition:background 120ms;display:flex;flex-direction:column;gap:3px}
 .day-cell:hover{background:var(--sky-bg)}
 .day-cell.is-closed{background:#F0F0F0;cursor:default;justify-content:center;align-items:center}
@@ -124,6 +125,13 @@ textarea.form-control{resize:vertical;min-height:64px}
 .day-cell.is-vacation{background:var(--clay-bg);justify-content:center;align-items:center}
 .day-cell.is-absence{background:var(--clay-bg);justify-content:center;align-items:center}
 .day-cell.is-perm{background:#EFF9F0;justify-content:center;align-items:center}
+/* divisione mattina/pomeriggio: colonna sinistra e destra separate da una
+   linea verticale, così a colpo d'occhio si vede quale metà giornata è
+   scoperta. I turni che attraversano la pausa restano a piena larghezza. */
+.day-cell.split{display:grid;grid-template-columns:1fr 1fr;padding:5px 0;gap:0}
+.day-cell.split .shift-span{grid-column:1 / -1;margin:0 5px 3px}
+.day-half{display:flex;flex-direction:column;gap:3px;padding:0 5px;min-width:0}
+.day-half.am{border-right:1px dashed var(--border)}
 .cell-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
 .shift-chip{border-left:3px solid var(--accent);padding:3px 5px;border-radius:0 3px 3px 0;font-size:11px;line-height:1.4;background:var(--sky-bg)}
 .shift-time{font-weight:700}
@@ -3267,10 +3275,17 @@ function renderSchedule(){
   }
   html+=`<div class="sch-grid"><table class="sch-table"><thead><tr><th class="emp-col">Dipendente</th>`;
 
+  // confine mattina/pomeriggio di ogni giorno, per la linea verticale nelle celle
+  const boundaries={};
+  DAYS_KEY.forEach(key=>{
+    const f=fasceDelGiorno(key);
+    boundaries[key]=f.length>=2?Math.round((f[0].e+f[1].s)/2):(f.length===1?f[0].s+Math.round((f[0].e-f[0].s)/2):null);
+  });
+
   DAYS_KEY.forEach((key,i)=>{
     const sh=S.storeHours[key];const closed=!sh||!sh.open;
     const camDay=!closed&&S.camionDays&&S.camionDays[key];
-    html+=`<th data-day="${key}" style="${closed?'opacity:.45':''}"><div>${DAYS_SHORT[i]}</div><div style="font-size:10px;font-weight:400">${fmtShort(addDays(ws,i))}</div>${closed?'<div style="font-size:9px">CHIUSO</div>':''}${camDay?'<div style="font-size:9px" title="Arrivo camion: copertura dalle 07:00">🚚 CAMION</div>':''}</th>`;
+    html+=`<th data-day="${key}" style="${closed?'opacity:.45':''}"><div>${DAYS_SHORT[i]}</div><div style="font-size:10px;font-weight:400">${fmtShort(addDays(ws,i))}</div>${closed?'<div style="font-size:9px">CHIUSO</div>':''}${camDay?'<div style="font-size:9px" title="Arrivo camion: copertura dalle 07:00">🚚 CAMION</div>':''}${(!closed&&boundaries[key]!=null)?`<div class="day-th-split"><span>${m2t(fasceDelGiorno(key)[0].s)}–${m2t(boundaries[key])}</span><span>${m2t(boundaries[key])}–${m2t(fasceDelGiorno(key)[fasceDelGiorno(key).length-1].e)}</span></div>`:''}</th>`;
   });
   html+=`</tr></thead><tbody>`;
 
@@ -3312,7 +3327,7 @@ function renderSchedule(){
         return;
       }
 
-      const shiftsHtml=shifts.map(s=>{
+      const chipHtml=(s,extraClass)=>{
         const area=getArea(s.areaId);const color=area?area.color:'var(--sky)';
         const otBadge=s.overtime?`<div class="badge-ot" style="background:#DCC7C4;color:var(--clay-text)">📌 STRAORDINARIO${s.coperturaExtra?' (copertura)':''}</div>`:'';
         const sunBadge=s.sundayFull?'<div class="badge-ot" style="background:var(--sky-bg);color:var(--primary)">☀️ Turno domenica</div>':'';
@@ -3322,10 +3337,28 @@ function renderSchedule(){
         const aprBadge=s.apertura?'<div class="badge-ot" style="background:var(--sage-100);color:var(--sage-900)">🔓 Apertura</div>':'';
         const gapBadge=s.directorGap?'<div class="badge-ot" style="background:var(--plum-bg);color:var(--plum-text)">🔧 Copertura direttore</div>':'';
         const prefBadge=s.preferred?'<div class="badge-ot" style="background:var(--sand-bg);color:var(--sand-text)">⭐ Preferenza</div>':'';
-        return `<div class="shift-chip ${s.overtime?'overtime':''}" style="border-left-color:${color}"><div class="shift-time">${s.startTime}–${s.endTime}</div><div class="shift-area">${area?esc(area.name):'—'}</div>${otBadge}${sunBadge}${ovlBadge}${camBadge}${aprBadge}${clsBadge}${gapBadge}${prefBadge}</div>`;
-      }).join('');
+        return `<div class="shift-chip ${s.overtime?'overtime':''} ${extraClass||''}" style="border-left-color:${color}"><div class="shift-time">${s.startTime}–${s.endTime}</div><div class="shift-area">${area?esc(area.name):'—'}</div>${otBadge}${sunBadge}${ovlBadge}${camBadge}${aprBadge}${clsBadge}${gapBadge}${prefBadge}</div>`;
+      };
 
-      html+=`<td data-day="${key}"><div class="day-cell" ${clickFn} style="${cursor}" ${!isReadOnly?'title="Clicca per modificare"':''}>${shiftsHtml}</div></td>`;
+      // Turni divisi fra mattina e pomeriggio rispetto al confine della giornata,
+      // separati da una linea verticale; chi copre entrambe le fasce (turno
+      // che attraversa la pausa) resta a piena larghezza sopra la divisione.
+      const boundary=boundaries[key];
+      if(boundary==null){
+        html+=`<td data-day="${key}"><div class="day-cell" ${clickFn} style="${cursor}" ${!isReadOnly?'title="Clicca per modificare"':''}>${shifts.map(s=>chipHtml(s)).join('')}</div></td>`;
+        return;
+      }
+      const amShifts=[],pmShifts=[],spanShifts=[];
+      shifts.forEach(s=>{
+        const ss=t2m(s.startTime),se=t2m(s.endTime);
+        if(se<=boundary)amShifts.push(s);
+        else if(ss>=boundary)pmShifts.push(s);
+        else spanShifts.push(s);
+      });
+      const spanHtml=spanShifts.map(s=>chipHtml(s,'shift-span')).join('');
+      const amHtml=amShifts.map(s=>chipHtml(s)).join('');
+      const pmHtml=pmShifts.map(s=>chipHtml(s)).join('');
+      html+=`<td data-day="${key}"><div class="day-cell split" ${clickFn} style="${cursor}" ${!isReadOnly?'title="Clicca per modificare"':''}>${spanHtml}<div class="day-half am">${amHtml}</div><div class="day-half pm">${pmHtml}</div></div></td>`;
     });
     html+=`</tr>`;
   });
