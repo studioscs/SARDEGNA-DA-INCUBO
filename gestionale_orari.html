@@ -360,6 +360,7 @@ textarea.form-control{resize:vertical;min-height:64px}
           <li><strong>Domenica: 3 persone</strong>, giornata piena nel rispetto dell'orario del negozio (due turni se c'è la pausa pranzo), a rotazione settimanale</li>
           <li>Turni sempre <strong>dentro l'orario del negozio</strong>, mai a cavallo della pausa pranzo</li>
           <li>Massimo <strong>8 ore al giorno</strong> e <strong>6 ore consecutive</strong>, poi pausa di almeno 2 ore</li>
+          <li><strong>Nessun turno sotto le 2 ore</strong>: un frammento più corto viene allungato se c'è spazio, altrimenti eliminato e segnalato</li>
           <li>Chi riceve il camion entra alle <strong>07:00</strong> e resta almeno fino alle 11:00</li>
           <li><strong>Apertura</strong>: le prime 2 ore sono sempre coperte da almeno una persona <strong>abilitata all'apertura</strong> (spunta 🔓, chi ha le chiavi). Chi riceve il camion è abilitato d'ufficio</li>
           <li><strong>Chiusura</strong>: le ultime 2 ore prima della chiusura sono sempre coperte da almeno una persona <strong>abilitata alla chiusura</strong> (spunta 🔐, chi ha il codice dell'allarme)</li>
@@ -1454,6 +1455,7 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     if(mattutino){
       mattutino.s = ORE7;
       if(mattutino.e < ORE11) mattutino.e = Math.min(ORE11, fineMattina);
+      if(mattutino.e - mattutino.s < MIN_FASCIA_H*60) mattutino.e = Math.min(mattutino.s + MIN_FASCIA_H*60, fineMattina);
       if(mattutino.e - mattutino.s > MAX_CONSEC_M) mattutino.e = mattutino.s + MAX_CONSEC_M;
       mattutino.camion = true;
     } else {
@@ -1669,8 +1671,8 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     } else {
       const pomeridiano = blocchi[0];
       let fine = finoA;
-      if(pomeridiano && pomeridiano.s - fine < PAUSA_M) fine = Math.max(apertura + 60, pomeridiano.s - PAUSA_M);
-      if(fine > apertura && entroTetto(scelto, (fine-apertura)/60)) blocchi.push({s:apertura, e:fine, apertura:true});
+      if(pomeridiano && pomeridiano.s - fine < PAUSA_M) fine = Math.max(apertura + MIN_FASCIA_H*60, pomeridiano.s - PAUSA_M);
+      if(fine - apertura >= MIN_FASCIA_H*60 && entroTetto(scelto, (fine-apertura)/60)) blocchi.push({s:apertura, e:fine, apertura:true});
       else warnings.push(`🔓 ${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}): impossibile coprire le prime 2 ore con una persona abilitata all'apertura.`);
     }
   });
@@ -1741,7 +1743,7 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
             const dopo  = blocchi.filter(b => b.s >= ge)[0];
             if(prima && ini - prima.e < PAUSA_M) ini = prima.e + PAUSA_M;
             if(dopo && dopo.s - fine < PAUSA_M) fine = dopo.s - PAUSA_M;
-            if(fine - ini < 60 || ini > gs) continue;          // deve partire dall'inizio del buco
+            if(fine - ini < MIN_FASCIA_H*60 || ini > gs) continue;   // mai turni sotto le 2h
             if(!entroTetto(esperta, (fine-ini)/60)) continue;  // tetto settimanale
             const oltre = empMaxH(esperta) > 0 && (worked[esperta.id]||0) >= empMaxH(esperta) - 0.01;
             blocchi.push({s:ini, e:fine, profumeria:true, straordinario: oltre || undefined});
@@ -1777,7 +1779,11 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     for(const e of avail){
       const deveLavorare = dayKey !== riposo[e.id] && !assente(e, dateOf(dayKey));
       const suoi = bloc(e.id);
-      if(suoi.some(b => b.e - b.s < MIN_FASCIA_H*60 - 0.01)) return false;
+      if(suoi.some(b => {
+        const f2 = fasce.find(g => b.s >= g.s && b.e <= g.e);
+        const min2 = Math.min(MIN_FASCIA_H*60, f2 ? f2.e - f2.s : MIN_FASCIA_H*60);
+        return b.e - b.s < min2 - 0.01;
+      })) return false;
       if(deveLavorare && !suoi.length && e.hoursType !== 'fixed' && !e.isDirectore) return false;
     }
     // copertura minima per fascia
@@ -1913,6 +1919,48 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     const r = riposo[emp.id];
     if(r) sch.days[r].shifts = sch.days[r].shifts.filter(s => s.employeeId !== emp.id);
   });
+
+  /* ═══ 12-bis. NESSUN TURNO SOTTO LE 2 ORE ══════════════════════════
+     Rete di sicurezza finale: un frammento troppo corto viene allungato
+     se c'è spazio nella fascia, altrimenti eliminato. Un turno di
+     un'ora non è un turno.                                          */
+  DAYS_KEY.forEach(dayKey => {
+    if(!sch.days[dayKey] || !openDays.includes(dayKey)) return;
+    const fasce = fasceDelGiorno(dayKey);
+    sch.days[dayKey].shifts = sch.days[dayKey].shifts.filter(x => {
+      const durata = t2m(x.endTime) - t2m(x.startTime);
+      const f = fasce.find(g => t2m(x.startTime) >= g.s && t2m(x.endTime) <= g.e)
+             || (x.startTime === '07:00' ? {s:t2m('07:00'), e:fasce.length?fasce[0].e:t2m(x.endTime)} : null);
+      // se la fascia di apertura dura meno di 2h, il minimo è la fascia stessa
+      const minimo = Math.min(MIN_FASCIA_H*60, f ? f.e - f.s : MIN_FASCIA_H*60);
+      if(durata >= minimo) return true;
+      if(f){
+        const altri = sch.days[dayKey].shifts.filter(y => y !== x && y.employeeId === x.employeeId);
+        const dopo  = altri.filter(y => t2m(y.startTime) >= t2m(x.endTime))
+                           .reduce((mn,y) => Math.min(mn, t2m(y.startTime) - PAUSA_M), f.e);
+        const nuovoFine = Math.min(f.e, dopo, t2m(x.startTime) + MAX_CONSEC_M);
+        if(nuovoFine - t2m(x.startTime) >= minimo){
+          x.endTime = m2t(nuovoFine);
+          x.hours = shiftH(x.startTime, x.endTime);
+          return true;
+        }
+      }
+      warnings.push(`✂️ ${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}): rimosso un turno di ${Math.round(durata)} minuti di ${(getEmp(x.employeeId)||{}).name} — sotto il minimo di ${MIN_FASCIA_H} ore.`);
+      return false;
+    });
+  });
+  // ricalcola le ore dopo l'eventuale pulizia
+  avail.forEach(e => { worked[e.id] = 0; overtimeH[e.id] = 0 });
+  DAYS_KEY.forEach(k => (sch.days[k] ? sch.days[k].shifts : []).forEach(x => {
+    const h = shiftH(x.startTime, x.endTime);
+    x.hours = h;
+    const emp = getEmp(x.employeeId);
+    const maxH = emp ? empMaxH(emp) : 0;
+    const prima = worked[x.employeeId] || 0;
+    worked[x.employeeId] = prima + h;
+    x.overtime = (maxH > 0 && prima + h > maxH) || undefined;
+    if(x.overtime) overtimeH[x.employeeId] = (overtimeH[x.employeeId]||0) + Math.min(h, prima + h - maxH);
+  }));
 
   /* ═══ 12. AVVISI ══════════════════════════════════════════════════ */
   flex.forEach(e => {
@@ -2436,6 +2484,12 @@ function eseguiControlli(sch){
         const e=getEmp(s0.employeeId);
         fuoriOrario.push(`<strong>${nome(k)}</strong> ${esc(e?e.name:'?')} ${s0.startTime}–${s0.endTime} — <span style="color:var(--clay-text)">fuori dall'orario di apertura (${fasce.map(([x,y])=>m2t(x)+'–'+m2t(y)).join(' / ')})</span>`);
       }
+      const fascia0=fasce.find(([x,y])=>a0>=x&&b0<=y);
+      const minAmm=Math.min(120, fascia0?fascia0[1]-fascia0[0]:120);
+      if(b0-a0 < minAmm){
+        const e=getEmp(s0.employeeId);
+        fuoriOrario.push(`<strong>${nome(k)}</strong> ${esc(e?e.name:'?')} ${s0.startTime}–${s0.endTime} — <span style="color:var(--clay-text)">turno di soli ${Math.round((b0-a0)/6)/10}h (minimo 2h)</span>`);
+      }
     });
   });
   // turni assegnati in giorni di chiusura
@@ -2443,7 +2497,7 @@ function eseguiControlli(sch){
     const n=(sch.days[k].shifts||[]).length;
     if(n)fuoriOrario.push(`<strong>${nome(k)}</strong>: ${n} turni assegnati ma il negozio è <span style="color:var(--clay-text)">chiuso</span>`);
   });
-  controlli.push({titolo:'7. Turni dentro l\'orario di apertura',ok:!fuoriOrario.length,
+  controlli.push({titolo:'7. Turni validi (orario e durata minima)',ok:!fuoriOrario.length,
     righe:fuoriOrario.length?fuoriOrario
       :['Tutti i turni rientrano nelle fasce di apertura impostate (l\'ingresso camion delle 07:00 è ammesso).']});
 
@@ -2949,6 +3003,10 @@ function saveShiftEdit(empId,dayKey,weekIdx,dayDate){
       ? (shOra.type==='split'?[[t2m(shOra.ms),t2m(shOra.me)],[t2m(shOra.as),t2m(shOra.ae)]]:[[t2m(shOra.ms),t2m(shOra.ae)]])
       : [];
     const dentroOrario=(x,y)=>fasceOra.some(([p,q])=>t2m(x)>=p&&t2m(y)<=q)||x==='07:00';
+    if(s&&e&&t2m(e)>t2m(s)&&t2m(e)-t2m(s)<120){
+      const copreFascia=fasceOra.some(([p,q])=>t2m(s)<=p&&t2m(e)>=q);
+      if(!copreFascia){ toast('⏱ Il turno deve durare almeno 2 ore'); return }
+    }
     if(s&&e&&t2m(e)>t2m(s)&&!dentroOrario(s,e)){
       toast(`⏰ ${s}–${e} è fuori dall'orario di apertura (${fasceOra.map(([p,q])=>m2t(p)+'–'+m2t(q)).join(' / ')||'negozio chiuso'})`);
       return;
@@ -2958,6 +3016,7 @@ function saveShiftEdit(empId,dayKey,weekIdx,dayDate){
       const s2=document.getElementById('eStart2').value,e2=document.getElementById('eEnd2').value,a2=document.getElementById('eArea2').value;
       if(s2&&e2&&t2m(e2)>t2m(s2)){
         if(s&&e&&t2m(s2)<t2m(e)){toast('⚠️ Il secondo turno si sovrappone al primo');return}
+        if(t2m(e2)-t2m(s2)<120&&!fasceOra.some(([p,q])=>t2m(s2)<=p&&t2m(e2)>=q)){toast('⏱ Il secondo turno deve durare almeno 2 ore');return}
         if(!dentroOrario(s2,e2)){toast(`⏰ ${s2}–${e2} è fuori dall'orario di apertura`);return}
         dd.shifts.push({employeeId:empId,startTime:s2,endTime:e2,areaId:a2,hours:shiftH(s2,e2)});
       }
