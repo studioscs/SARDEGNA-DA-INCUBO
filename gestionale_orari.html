@@ -1000,7 +1000,6 @@ function trovaScoperture(sch){
   const ws = new Date(sch.weekStart+'T00:00:00');
   const openDays = DAYS_KEY.filter(k => S.storeHours[k] && S.storeHours[k].open && sch.days[k]);
   const minReq = minPersoneRichieste();
-  const esperte = S.employees.filter(e => e.isProfumeria);
   const abilitatiChiusura = S.employees.filter(e => e.canCloseStore);
   const abilitatiApertura = S.employees.filter(apreNegozio);
   const scoperture = [];
@@ -1010,18 +1009,28 @@ function trovaScoperture(sch){
     const fasce = fasceDelGiorno(dayKey);
     const shifts = sch.days[dayKey].shifts || [];
     const presentiAt = m => shifts.filter(s => t2m(s.startTime) <= m && t2m(s.endTime) > m);
-    const aggiungiBuchi = (kind, cond) => fasce.forEach(f => {
+    const aggiungiBuchi = (extra, cond) => fasce.forEach(f => {
       let inizio = null;
       for(let m = f.s; m < f.e; m += 15){
         if(cond(m)){ if(inizio === null) inizio = m }
-        else if(inizio !== null){ scoperture.push({kind, dayKey, s:inizio, e:m}); inizio = null }
+        else if(inizio !== null){ scoperture.push(Object.assign({dayKey, s:inizio, e:m}, extra)); inizio = null }
       }
-      if(inizio !== null) scoperture.push({kind, dayKey, s:inizio, e:f.e});
+      if(inizio !== null) scoperture.push(Object.assign({dayKey, s:inizio, e:f.e}, extra));
     });
 
-    aggiungiBuchi('minimo', m => presentiAt(m).length < minReq);
-    if(esperte.length) aggiungiBuchi('profumeria', m =>
-      !presentiAt(m).some(s => { const e = getEmp(s.employeeId); return e && e.isProfumeria }));
+    aggiungiBuchi({kind:'minimo'}, m => presentiAt(m).length < minReq);
+    // carenze per singola area: profumeria richiede un'esperta etichettata su
+    // quell'area (non basta che sia presente altrove), le altre aree il
+    // numero minimo di persone configurato.
+    S.areas.forEach(area => {
+      const min = Math.max(1, area.minCoverage || 1);
+      const prof = isProfArea(area);
+      aggiungiBuchi({kind:'area', areaId:area.id}, m => {
+        const inArea = shifts.filter(s => s.areaId === area.id && t2m(s.startTime) <= m && t2m(s.endTime) > m);
+        if(prof) return !inArea.some(s => { const e = getEmp(s.employeeId); return e && e.isProfumeria });
+        return inArea.length < min;
+      });
+    });
 
     if(abilitatiApertura.length){
       const ini = t2m(sh.ms), fine = Math.min(ini+120, t2m(sh.type==='split'?sh.me:sh.ae));
@@ -1043,9 +1052,18 @@ function trovaScoperture(sch){
   return scoperture;
 }
 
-const SCOPERTURA_LABEL = {minimo:'copertura minima', profumeria:'profumeria senza esperta',
+const SCOPERTURA_LABEL = {minimo:'copertura minima',
   apertura:'apertura non presidiata', chiusura:'chiusura non presidiata', camion:'camion senza copertura alle 07:00'};
-const SCOPERTURA_ICONA = {minimo:'🕳', profumeria:'🌸', apertura:'🔓', chiusura:'🔐', camion:'🚚'};
+const SCOPERTURA_ICONA = {minimo:'🕳', area:'📍', apertura:'🔓', chiusura:'🔐', camion:'🚚'};
+function scoperturaEtichetta(sc){
+  if(sc.kind === 'area'){
+    const a = S.areas.find(x => x.id === sc.areaId);
+    const nomeArea = a ? a.name : 'area';
+    return isProfArea(a||{}) ? `profumeria (${nomeArea}) senza esperta` : `${nomeArea} sotto copertura minima`;
+  }
+  return SCOPERTURA_LABEL[sc.kind] || sc.kind;
+}
+function scoperturaIcona(sc){ return sc.kind === 'area' && isProfArea(S.areas.find(x=>x.id===sc.areaId)||{}) ? '🌸' : SCOPERTURA_ICONA[sc.kind] }
 
 function calcolaSoluzioni(sch, sc){
   const ws = new Date(sch.weekStart+'T00:00:00');
@@ -1064,14 +1082,42 @@ function calcolaSoluzioni(sch, sc){
     (sch.days[k].shifts||[]).filter(s => s.employeeId === emp.id)
       .reduce((tt,s) => tt + (s.hours || shiftH(s.startTime, s.endTime)), 0) : 0), 0);
 
-  const idoneo = emp => sc.kind === 'profumeria' ? emp.isProfumeria
-    : sc.kind === 'apertura' ? apreNegozio(emp)
-    : sc.kind === 'chiusura' ? emp.canCloseStore : true;
+  const areaTarget = sc.kind === 'area' ? S.areas.find(a => a.id === sc.areaId) : null;
+  const profTarget = !!(areaTarget && isProfArea(areaTarget));
+  const idoneo = emp => sc.kind === 'apertura' ? apreNegozio(emp)
+    : sc.kind === 'chiusura' ? emp.canCloseStore
+    : profTarget ? emp.isProfumeria : true;
 
   const candidati = S.employees.filter(emp => emp.hoursType !== 'fixed' && !emp.isDirectore
     && idoneo(emp) && !assente(emp));
 
   const soluzioni = [];
+
+  // ── rietichetta (kind 'area'): a parità di ore, sposta l'etichetta di un
+  // turno già presente sull'intero buco da un'area che ne ha ancora
+  // abbastanza senza di lui, invece di aggiungere ore nuove. ────────────
+  if(sc.kind === 'area'){
+    const areaSoddisfattaSenza = (areaId, escludi) => {
+      const area = S.areas.find(a => a.id === areaId);
+      if(!area) return true;
+      const rimasti = shiftsGiorno.filter(x => x !== escludi && x.areaId === areaId
+        && t2m(x.startTime) <= sc.s && t2m(x.endTime) >= sc.e);
+      if(isProfArea(area)) return rimasti.some(x => { const e = getEmp(x.employeeId); return e && e.isProfumeria });
+      return rimasti.length >= Math.max(1, area.minCoverage || 1);
+    };
+    shiftsGiorno.forEach(s => {
+      if(s.areaId === sc.areaId) return;
+      if(!(t2m(s.startTime) <= sc.s && t2m(s.endTime) >= sc.e)) return;   // deve coprire tutto il buco
+      const emp = getEmp(s.employeeId);
+      if(!emp || (profTarget && !emp.isProfumeria)) return;
+      if(!areaSoddisfattaSenza(s.areaId, s)) return;
+      const areaAttuale = S.areas.find(a => a.id === s.areaId);
+      soluzioni.push({tipo:'rietichetta', emp, dayKey, gapKind:'area', targetAreaId:sc.areaId, shiftRef:s,
+        nuovoInizio:t2m(s.startTime), nuovoFine:t2m(s.endTime),
+        nota:`sposta l'etichetta da ${esc(areaAttuale?areaAttuale.name:'—')} a ${esc(areaTarget?areaTarget.name:'')} (stesso orario, nessuna ora aggiunta)`});
+    });
+  }
+
   candidati.forEach(emp => {
     const suoi = shiftsGiorno.filter(s => s.employeeId === emp.id)
       .map(s => ({s:t2m(s.startTime), e:t2m(s.endTime), obj:s})).sort((a,b) => a.s - b.s);
@@ -1080,11 +1126,11 @@ function calcolaSoluzioni(sch, sc){
     const vicinoPrima = suoi.find(x => x.e === sc.s);
     const vicinoDopo  = suoi.find(x => x.s === sc.e);
     if(vicinoPrima && (sc.e - vicinoPrima.s) <= 360)
-      soluzioni.push({tipo:'estendi', emp, dayKey, gapKind:sc.kind, shiftRef:vicinoPrima.obj,
+      soluzioni.push({tipo:'estendi', emp, dayKey, gapKind:sc.kind, targetAreaId:sc.areaId, shiftRef:vicinoPrima.obj,
         nuovoInizio:vicinoPrima.s, nuovoFine:sc.e,
         nota:`allunga il turno delle ${vicinoPrima.obj.startTime}–${vicinoPrima.obj.endTime}`});
     if(vicinoDopo && (vicinoDopo.e - sc.s) <= 360)
-      soluzioni.push({tipo:'estendi', emp, dayKey, gapKind:sc.kind, shiftRef:vicinoDopo.obj,
+      soluzioni.push({tipo:'estendi', emp, dayKey, gapKind:sc.kind, targetAreaId:sc.areaId, shiftRef:vicinoDopo.obj,
         nuovoInizio:sc.s, nuovoFine:vicinoDopo.e,
         nota:`anticipa il turno delle ${vicinoDopo.obj.startTime}–${vicinoDopo.obj.endTime}`});
 
@@ -1098,17 +1144,17 @@ function calcolaSoluzioni(sch, sc){
       if(fine - ini < 120) return;
       const target = empMaxH(emp);
       const overtime = target > 0 && (oreSettimana(emp) + (fine-ini)/60) > target + 0.01;
-      soluzioni.push({tipo:'nuovo', emp, dayKey, gapKind:sc.kind, nuovoInizio:ini, nuovoFine:fine, overtime, nota:'nuovo turno'});
+      soluzioni.push({tipo:'nuovo', emp, dayKey, gapKind:sc.kind, targetAreaId:sc.areaId, nuovoInizio:ini, nuovoFine:fine, overtime, nota:'nuovo turno'});
     }
   });
 
-  soluzioni.sort((a,b) => (a.tipo==='estendi'?0:1) - (b.tipo==='estendi'?0:1)
-    || (a.overtime?1:0) - (b.overtime?1:0));
+  const peso = t => t==='rietichetta' ? 0 : t==='estendi' ? 1 : 2;
+  soluzioni.sort((a,b) => peso(a.tipo) - peso(b.tipo) || (a.overtime?1:0) - (b.overtime?1:0));
   return soluzioni.slice(0,5);
 }
 
 function sceltaAreaPerGap(sch, sc){
-  if(sc.kind === 'profumeria'){ const a = S.areas.find(isProfArea); if(a) return a.id }
+  if(sc.kind === 'area') return sc.areaId;
   const shiftsGiorno = sch.days[sc.dayKey].shifts || [];
   const conteggio = {}; S.areas.forEach(a => conteggio[a.id] = 0);
   shiftsGiorno.forEach(s => { if(s.areaId && t2m(s.startTime) < sc.e && sc.s < t2m(s.endTime)) conteggio[s.areaId]++ });
@@ -1119,17 +1165,19 @@ function sceltaAreaPerGap(sch, sc){
 function applicaSoluzione(weekIdx, sol){
   const sch = S.weekSchedules[weekIdx];
   if(!sch) return;
-  if(sol.tipo === 'estendi'){
+  if(sol.tipo === 'rietichetta'){
+    sol.shiftRef.areaId = sol.targetAreaId;
+  } else if(sol.tipo === 'estendi'){
     sol.shiftRef.startTime = m2t(sol.nuovoInizio);
     sol.shiftRef.endTime = m2t(sol.nuovoFine);
     sol.shiftRef.hours = shiftH(sol.shiftRef.startTime, sol.shiftRef.endTime);
-    if(sol.gapKind === 'profumeria'){ const a = S.areas.find(isProfArea); if(a) sol.shiftRef.areaId = a.id }
+    if(sol.gapKind === 'area') sol.shiftRef.areaId = sol.targetAreaId;
     if(sol.gapKind === 'apertura') sol.shiftRef.apertura = true;
     if(sol.gapKind === 'chiusura') sol.shiftRef.chiusura = true;
     if(sol.gapKind === 'camion') sol.shiftRef.camion = true;
   } else {
     const nuovo = {employeeId: sol.emp.id, startTime: m2t(sol.nuovoInizio), endTime: m2t(sol.nuovoFine),
-      areaId: sceltaAreaPerGap(sch, {dayKey:sol.dayKey, s:sol.nuovoInizio, e:sol.nuovoFine, kind:sol.gapKind}),
+      areaId: sceltaAreaPerGap(sch, {dayKey:sol.dayKey, s:sol.nuovoInizio, e:sol.nuovoFine, kind:sol.gapKind, areaId:sol.targetAreaId}),
       hours: shiftH(m2t(sol.nuovoInizio), m2t(sol.nuovoFine)), overtime: sol.overtime || undefined};
     if(sol.gapKind === 'apertura') nuovo.apertura = true;
     if(sol.gapKind === 'chiusura') nuovo.chiusura = true;
@@ -3482,14 +3530,23 @@ function renderSchedule(){
   }
 
   // ── CARENZE DI COPERTURA — con tasto per risolverle rapidamente ──
-  window._scopertureAttuali=isReadOnly?[]:trovaScoperture(sch);
+  // ordinate per gravità: prima le regole vincolanti (apertura/chiusura/
+  // camion/profumeria), poi la copertura minima aggregata, infine le
+  // singole aree — che su un organico ridotto possono essere numerose.
+  const pesoScopertura = sc => sc.kind==='apertura'||sc.kind==='chiusura'||sc.kind==='camion' ? 0
+    : (sc.kind==='area' && isProfArea(S.areas.find(x=>x.id===sc.areaId)||{})) ? 0
+    : sc.kind==='minimo' ? 1 : 2;
+  window._scopertureAttuali=(isReadOnly?[]:trovaScoperture(sch))
+    .sort((a,b) => pesoScopertura(a)-pesoScopertura(b));
   if(window._scopertureAttuali.length){
+    const nAree = window._scopertureAttuali.filter(sc => pesoScopertura(sc)===2).length;
     html+=`<div class="alert alert-warning" style="margin-bottom:12px">
       <strong>🔧 Carenze di copertura da risolvere (${window._scopertureAttuali.length}):</strong>
-      <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+      ${nAree?`<div style="font-size:11px;color:var(--muted);margin-top:2px">Comprese ${nAree} fasce sotto la copertura minima impostata per le singole aree — regolabile in "Aree".</div>`:''}
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px;max-height:280px;overflow-y:auto;padding-right:4px">
         ${window._scopertureAttuali.map((sc,i)=>`
           <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
-            <span>${SCOPERTURA_ICONA[sc.kind]} <strong>${DAYS_FULL[DAYS_KEY.indexOf(sc.dayKey)]}</strong> ${m2t(sc.s)}–${m2t(sc.e)} — ${SCOPERTURA_LABEL[sc.kind]}</span>
+            <span>${scoperturaIcona(sc)} <strong>${DAYS_FULL[DAYS_KEY.indexOf(sc.dayKey)]}</strong> ${m2t(sc.s)}–${m2t(sc.e)} — ${scoperturaEtichetta(sc)}</span>
             <button class="btn btn-sm btn-secondary" onclick="apriRisolutore(${idx},${i})">🔧 Risolvi ▸</button>
           </div>`).join('')}
       </div>
@@ -4437,12 +4494,12 @@ function apriRisolutore(weekIdx,gapIdx){
   const sc=(window._scopertureAttuali||[])[gapIdx];
   if(!sch||!sc)return;
   _soluzioniAttuali=calcolaSoluzioni(sch,sc).map(sol=>Object.assign(sol,{weekIdx}));
-  const titolo=`${SCOPERTURA_ICONA[sc.kind]} ${DAYS_FULL[DAYS_KEY.indexOf(sc.dayKey)]} ${m2t(sc.s)}–${m2t(sc.e)} — ${SCOPERTURA_LABEL[sc.kind]}`;
+  const titolo=`${scoperturaIcona(sc)} ${DAYS_FULL[DAYS_KEY.indexOf(sc.dayKey)]} ${m2t(sc.s)}–${m2t(sc.e)} — ${scoperturaEtichetta(sc)}`;
   const righe=_soluzioniAttuali.map((sol,i)=>`
     <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:6px;margin-bottom:8px">
       <div>
         <div style="font-weight:700">${esc(sol.emp.name)} — ${m2t(sol.nuovoInizio)}–${m2t(sol.nuovoFine)}</div>
-        <div style="font-size:11px;color:var(--muted)">${sol.tipo==='estendi'?sol.nota:'Nuovo turno'}${sol.overtime?' · <span style="color:var(--clay-text)">📌 straordinario</span>':''}</div>
+        <div style="font-size:11px;color:var(--muted)">${sol.tipo==='nuovo'?'Nuovo turno':sol.nota}${sol.overtime?' · <span style="color:var(--clay-text)">📌 straordinario</span>':''}</div>
       </div>
       <button class="btn btn-sm btn-primary" onclick="sceglisoluzione(${i})">Applica ✓</button>
     </div>`).join('');
