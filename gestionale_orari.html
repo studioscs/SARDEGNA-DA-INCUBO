@@ -1293,27 +1293,7 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
   };
   tagliaEccedenza();
 
-  /* ═══ 8. CAMION ═══════════════════════════════════════════════════
-     Nei giorni di consegna chi la riceve entra alle 07:00 e resta
-     almeno fino alle 11:00.                                         */
-  feriali.concat(sundayOpen?['sun']:[]).forEach(dayKey => {
-    if(!(S.camionDays && S.camionDays[dayKey])) return;
-    const sh = S.storeHours[dayKey];
-    const camionista = avail.find(e => e.takesMorningDelivery &&
-      A[e.id][dayKey] && A[e.id][dayKey].length);
-    if(!camionista) return;
-    const blocchi = A[camionista.id][dayKey].sort((a,b) => a.s - b.s);
-    const primo = blocchi[0];
-    if(primo.s <= t2m('07:00')) return;
-    primo.s = t2m('07:00');
-    if(primo.e < t2m('11:00')) primo.e = Math.min(t2m('11:00'), t2m(sh.type==='split'?sh.me:sh.ae));
-    // anche entrando alle 07:00 restano validi i limiti: max 6h consecutive
-    if(primo.e - primo.s > 360) primo.e = primo.s + 360;
-  });
-
-  tagliaEccedenza();   // il camion ha allungato la giornata: si rilivella
-
-  /* ═══ 9. TURNI FISSI + DIRETTORE ══════════════════════════════════ */
+  /* ═══ 8. TURNI FISSI + DIRETTORE ══════════════════════════════════ */
   [...fissi, ...direttori].forEach(emp => {
     Object.keys(turniFissi[emp.id] || {}).forEach(k => {
       if(k === riposo[emp.id]) return;               // mai turni nel riposo
@@ -1336,6 +1316,62 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
       contaFasce[dir.id][f.id]++;
     });
   });
+
+  /* ═══ 9. CAMION — copertura garantita dalle 07:00 ═══════════════════
+     Nei giorni segnati come "arrivo camion" ci deve SEMPRE essere una
+     persona in turno dalle 07:00, che resta almeno fino alle 11:00.
+     Si sceglie in quest'ordine: l'addetto camion già in turno al
+     mattino, l'addetto camion presente quel giorno, un altro dipendente
+     già in turno al mattino, infine un qualsiasi dipendente disponibile.
+     Se il turno del mattino non c'è, viene creato.                   */
+  const camionDi = {};   // dayKey → nome di chi riceve il camion
+  openDays.forEach(dayKey => {
+    if(!(S.camionDays && S.camionDays[dayKey])) return;
+    const sh = S.storeHours[dayKey];
+    const ORE7 = t2m('07:00'), ORE11 = t2m('11:00');
+    const fineMattina = t2m(sh.type === 'split' ? sh.me : sh.ae);
+    if(t2m(sh.ms) <= ORE7) return;                 // il negozio apre già alle 07:00
+
+    // già coperto da qualcuno?
+    const giaCoperto = avail.find(e => (A[e.id][dayKey]||[]).some(b => b.s <= ORE7));
+    if(giaCoperto){ camionDi[dayKey] = giaCoperto.name; return }
+
+    const disponibile = e => dayKey !== riposo[e.id] && !assente(e, dateOf(dayKey));
+    const inMattinata = e => (A[e.id][dayKey]||[]).some(b => b.s < fineMattina);
+    const gruppi = [
+      avail.filter(e => e.takesMorningDelivery && disponibile(e) && inMattinata(e)),
+      avail.filter(e => e.takesMorningDelivery && disponibile(e)),
+      flex.filter(e => disponibile(e) && inMattinata(e)),
+      flex.filter(e => disponibile(e)),
+      avail.filter(e => disponibile(e) && !e.isDirectore),
+      avail.filter(e => disponibile(e))
+    ];
+    const scelto = (gruppi.find(g => g.length) || [])[0];
+    if(!scelto){
+      warnings.push(`🚚 ${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}): nessun dipendente disponibile per ricevere il camion alle 07:00.`);
+      return;
+    }
+
+    const blocchi = (A[scelto.id][dayKey] = A[scelto.id][dayKey] || []).sort((a,b) => a.s - b.s);
+    const mattutino = blocchi.find(b => b.s < fineMattina);
+    if(mattutino){
+      mattutino.s = ORE7;
+      if(mattutino.e < ORE11) mattutino.e = Math.min(ORE11, fineMattina);
+      if(mattutino.e - mattutino.s > MAX_CONSEC_M) mattutino.e = mattutino.s + MAX_CONSEC_M;
+      mattutino.camion = true;
+    } else {
+      // quel giorno lavora solo il pomeriggio: si crea il turno del camion
+      let fine = Math.min(Math.max(ORE11, ORE7 + MIN_FASCIA_H*60), fineMattina, ORE7 + MAX_CONSEC_M);
+      const pomeridiano = blocchi.find(b => b.s >= fineMattina);
+      if(pomeridiano && pomeridiano.s - fine < PAUSA_M) fine = Math.max(ORE7 + MIN_FASCIA_H*60, pomeridiano.s - PAUSA_M);
+      if(fine > ORE7) blocchi.push({s:ORE7, e:fine, camion:true});
+    }
+    camionDi[dayKey] = scelto.name;
+    if(!scelto.takesMorningDelivery)
+      warnings.push(`🚚 ${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}): camion ricevuto da ${scelto.name} — nessun addetto camion disponibile quel giorno.`);
+  });
+
+  tagliaEccedenza();   // il camion ha allungato la giornata: si rilivella
 
   /* ═══ 10. AREE ════════════════════════════════════════════════════ */
   const nonMag = S.areas.filter(a => !isMagazzino(a));
@@ -1382,6 +1418,7 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
           hours     : h,
           overtime  : isOT || undefined,
           sovrapposto: b.oltreCapienza || undefined,
+          camion    : b.camion || undefined,
           sundayFull: dayKey === 'sun' ? true : undefined
         });
         worked[emp.id] = prima + h;
@@ -1422,6 +1459,15 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
       warnings.push(`⚠️ ${emp.name} (${weekRange(weekStartISO)}): ${vuoti.map(nomeGiorno).join(', ')} senza turno${emp.hoursType==='fixed'?' — completare l\'orario fisso nella scheda del dipendente':''}.`);
   });
 
+  // controllo finale: ogni giorno con camion ha una presenza dalle 07:00
+  openDays.forEach(k => {
+    if(!(S.camionDays && S.camionDays[k])) return;
+    const sh = S.storeHours[k];
+    if(t2m(sh.ms) <= t2m('07:00')) return;
+    const ok = sch.days[k].shifts.some(x => t2m(x.startTime) <= t2m('07:00'));
+    if(!ok) warnings.push(`🚚 ${nomeGiorno(k)} (${weekRange(weekStartISO)}): arrivo camion SENZA copertura alle 07:00.`);
+  });
+
   // memoria per la rotazione dei riposi
   avail.forEach(e => { if(riposo[e.id]) restHistory[e.id] = riposo[e.id] });
 
@@ -1438,6 +1484,15 @@ function verificaRegole(sch){
   const ws = new Date(sch.weekStart+'T00:00:00');
   const openDays = DAYS_KEY.filter(k => S.storeHours[k] && S.storeHours[k].open && sch.days[k]);
   const dateOf = k => isoDate(addDays(ws, DAYS_KEY.indexOf(k)));
+
+  // giorni con arrivo camion: serve una presenza dalle 07:00
+  openDays.forEach(k => {
+    if(!(S.camionDays && S.camionDays[k])) return;
+    const sh = S.storeHours[k];
+    if(t2m(sh.ms) <= t2m('07:00')) return;
+    if(!sch.days[k].shifts.some(x => t2m(x.startTime) <= t2m('07:00')))
+      errori.push(`🚚 <strong>${DAYS_FULL[DAYS_KEY.indexOf(k)]}</strong>: arrivo camion senza copertura alle 07:00.`);
+  });
 
   S.employees.forEach(emp => {
     if(isOnVacation(emp, sch.weekStart)) return;
@@ -1944,7 +1999,8 @@ function renderSchedule(){
 
   DAYS_KEY.forEach((key,i)=>{
     const sh=S.storeHours[key];const closed=!sh||!sh.open;
-    html+=`<th data-day="${key}" style="${closed?'opacity:.45':''}"><div>${DAYS_SHORT[i]}</div><div style="font-size:10px;font-weight:400">${fmtShort(addDays(ws,i))}</div>${closed?'<div style="font-size:9px">CHIUSO</div>':''}</th>`;
+    const camDay=!closed&&S.camionDays&&S.camionDays[key];
+    html+=`<th data-day="${key}" style="${closed?'opacity:.45':''}"><div>${DAYS_SHORT[i]}</div><div style="font-size:10px;font-weight:400">${fmtShort(addDays(ws,i))}</div>${closed?'<div style="font-size:9px">CHIUSO</div>':''}${camDay?'<div style="font-size:9px" title="Arrivo camion: copertura dalle 07:00">🚚 CAMION</div>':''}</th>`;
   });
   html+=`</tr></thead><tbody>`;
 
@@ -1991,9 +2047,10 @@ function renderSchedule(){
         const otBadge=s.overtime?'<div class="badge-ot">📌 STRAORDINARIO</div>':'';
         const sunBadge=s.sundayFull?'<div class="badge-ot" style="background:#D6EAF8;color:#1B4F72">☀️ Turno domenica</div>':'';
         const ovlBadge=s.sovrapposto?'<div class="badge-ot" style="background:#FDEBD0;color:#7E5109">👥 Sovrapposizione</div>':'';
+        const camBadge=s.camion?'<div class="badge-ot" style="background:#FCF3CF;color:#7D6608">🚚 Camion 07:00</div>':'';
         const gapBadge=s.directorGap?'<div class="badge-ot" style="background:#E8DAEF;color:#5B2C6F">🔧 Copertura direttore</div>':'';
         const prefBadge=s.preferred?'<div class="badge-ot" style="background:#FCF3CF;color:#7D6608">⭐ Preferenza</div>':'';
-        return `<div class="shift-chip ${s.overtime?'overtime':''}" style="border-left-color:${color}"><div class="shift-time">${s.startTime}–${s.endTime}</div><div class="shift-area">${area?esc(area.name):'—'}</div>${otBadge}${sunBadge}${ovlBadge}${gapBadge}${prefBadge}</div>`;
+        return `<div class="shift-chip ${s.overtime?'overtime':''}" style="border-left-color:${color}"><div class="shift-time">${s.startTime}–${s.endTime}</div><div class="shift-area">${area?esc(area.name):'—'}</div>${otBadge}${sunBadge}${ovlBadge}${camBadge}${gapBadge}${prefBadge}</div>`;
       }).join('');
 
       html+=`<td data-day="${key}"><div class="day-cell" ${clickFn} style="${cursor}" ${!isReadOnly?'title="Clicca per modificare"':''}>${shiftsHtml}</div></td>`;
@@ -2006,6 +2063,8 @@ function renderSchedule(){
     ${S.areas.map(a=>`<span class="legend-item"><span style="width:12px;height:12px;background:${a.color};border-radius:2px;display:inline-block"></span>${esc(a.name)}</span>`).join('')}
     <span class="legend-item"><span style="width:12px;height:12px;background:#FFFBF0;border:1px solid #FFEEBA;border-radius:2px;display:inline-block"></span>Riposo</span>
     <span class="legend-item"><span style="width:12px;height:12px;background:#FFF;border:1px solid #DEE2E6;border-radius:2px;display:inline-block"></span>Nessun turno (non è riposo)</span>
+    <span class="legend-item">🚚 Camion (apertura 07:00)</span>
+    <span class="legend-item">👥 Turno sovrapposto (per completare le ore)</span>
     <span class="legend-item"><span style="width:12px;height:12px;background:#FEF0F0;border:1px solid #F5C6CB;border-radius:2px;display:inline-block"></span>Assenza</span>
     <span class="legend-item"><span style="width:12px;height:12px;background:#FFF5F5;border:1px solid #FADBD8;border-radius:2px;display:inline-block"></span>Ferie</span>
   </div>`;
