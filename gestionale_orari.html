@@ -352,7 +352,7 @@ textarea.form-control{resize:vertical;min-height:64px}
           <li>Turni sempre <strong>dentro l'orario del negozio</strong>, mai a cavallo della pausa pranzo</li>
           <li>Massimo <strong>8 ore al giorno</strong> e <strong>6 ore consecutive</strong>, poi pausa di almeno 2 ore</li>
           <li>Chi riceve il camion entra alle <strong>07:00</strong> e resta almeno fino alle 11:00</li>
-          <li>Ore contrattuali come obiettivo: si aggiungono o si accorciano turni per avvicinarsi al contratto, senza violare le regole sopra — le ore mancanti o gli straordinari vengono segnalati</li>
+          <li><strong>Ore da contratto completate ogni settimana</strong>: nessuno chiude la settimana sotto il proprio monte ore. Se lo spazio non basta, i turni vengono <strong>sovrapposti</strong> superando il limite di persone in contemporanea — le sovrapposizioni sono marcate 👥 nell'orario ed elencate negli avvisi</li>
           <li>Ferie, permessi e assenze rispettati automaticamente</li>
           <li>Il direttore copre le fasce scoperte (max 3h al giorno, mai di domenica)</li>
         </ul>
@@ -1171,110 +1171,127 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
       warnings.push(`🌸 ${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}): nessuna esperta di profumeria in turno (riposo o assenza).`);
   });
 
-  /* ═══ 6. ORE CONTRATTUALI — R7 ════════════════════════════════════
-     Si aggiungono seconde fasce a chi è sotto contratto e si accorciano
-     i turni a chi è sopra. Le fasce base non si tolgono mai (R2).   */
-  const oreDi = id => Object.keys(A[id]).reduce((tot,k) =>
-    tot + A[id][k].reduce((t,f) => t + (f.e - f.s)/60, 0), 0);
-
-  // 6a — aggiungi seconde fasce
-  let cambiato = true;
-  while(cambiato){
-    cambiato = false;
-    flex.map(e => ({e, mancano: empMaxH(e) - oreDi(e.id)}))
-        .filter(x => x.mancano > MIN_FASCIA_H - 0.01)
-        .sort((a,b) => b.mancano - a.mancano)
-        .forEach(({e}) => {
-          const giorni = giorniLavoro(e).filter(k => k !== 'sun' && fasceDi(e.id,k).length === 1);
-          if(!giorni.length) return;
-          // giorno/fascia con più spazio, rispettando l'alternanza
-          let best = null;
-          giorni.forEach(k => {
-            fasceDelGiorno(k).forEach(f => {
-              if(fasceDi(e.id,k).some(x => x.id === f.id)) return;
-              if(presenti(k, f.id) >= capienza) return;
-              const punteggio = presenti(k, f.id) + contaFasce[e.id][f.id];
-              if(!best || punteggio < best.punteggio) best = {k, f, punteggio};
-            });
-          });
-          if(!best) return;
-          occupa(e.id, best.k, best.f);
-          registra(e.id, best.f);
-          cambiato = true;
-        });
-  }
-
-  /* ═══ 7. DA FASCE A TURNI ═════════════════════════════════════════
-     Le fasce diventano turni veri. Fasce contigue (orario continuato)
-     si uniscono. Le ore in eccesso si tolgono accorciando i turni,
-     mai sotto la presenza minima.                                   */
-  const MAX_GIORNO_M = 480;   // massimo 8h di lavoro al giorno
-  const MAX_CONSEC_M = 360;   // massimo 6h consecutive, poi pausa
+  /* ═══ 6-7. ORE CONTRATTUALI E TURNI REALI — R7 ══════════════════════
+     Le fasce diventano turni veri (unione delle contigue, tetto
+     giornaliero, pausa dopo 6h consecutive). Il conteggio delle ore
+     lavora sui turni REALI, non sulle fasce grezze: si continuano ad
+     aggiungere fasce finché il monte ore settimanale non è raggiunto.
+     Se lo spazio non basta si superano prima il limite di persone in
+     contemporanea (turni marcati come sovrapposti) e poi il tetto
+     giornaliero: le ore da contratto vanno chiuse.                   */
+  const MAX_GIORNO_M = 480;   // 8h al giorno (elevabile se mancano ore)
+  const MAX_CONSEC_M = 360;   // 6h consecutive
   const PAUSA_M      = 120;   // pausa obbligatoria fra due turni
 
-  avail.forEach(emp => {
-    Object.keys(A[emp.id]).forEach(dayKey => {
-      const lista = A[emp.id][dayKey].slice().sort((a,b) => a.s - b.s);
-      // unione delle fasce contigue (orario continuato)
-      const uniti = [];
-      lista.forEach(f => {
-        const ultimo = uniti[uniti.length-1];
-        if(ultimo && f.s === ultimo.e) ultimo.e = f.e;
-        else uniti.push({s:f.s, e:f.e});
-      });
-      // cap giornaliero: si accorcia partendo dall'ultimo blocco
-      let totale = uniti.reduce((t,b) => t + (b.e-b.s), 0);
-      for(let i = uniti.length-1; i >= 0 && totale > MAX_GIORNO_M; i--){
-        const b = uniti[i];
-        const taglio = Math.min(totale - MAX_GIORNO_M, (b.e-b.s) - MIN_FASCIA_H*60);
-        if(taglio > 0){ b.e -= taglio; totale -= taglio }
-      }
-      // nessun blocco oltre 6h consecutive: si spezza con una pausa di 2h
-      const finali = [];
-      uniti.forEach(b => {
-        const spazio = b.e - b.s;
-        if(spazio <= MAX_CONSEC_M){ finali.push(b); return }
-        let lavoro = Math.min(spazio, MAX_GIORNO_M);
-        if(spazio - lavoro < PAUSA_M) lavoro = spazio - PAUSA_M;   // serve spazio per la pausa
-        if(lavoro <= MAX_CONSEC_M){ finali.push({s:b.s, e:b.s + Math.max(lavoro, MIN_FASCIA_H*60)}); return }
-        const t1 = Math.min(Math.ceil(lavoro/2), MAX_CONSEC_M);
-        const t2 = Math.min(lavoro - t1, MAX_CONSEC_M);
-        finali.push({s:b.s, e:b.s + t1});
-        const inizio2 = b.s + t1 + PAUSA_M;
-        if(t2 >= MIN_FASCIA_H*60 && inizio2 + t2 <= b.e) finali.push({s:inizio2, e:inizio2 + t2});
-      });
-      A[emp.id][dayKey] = finali;
+  // turni reali di una giornata a partire dalle fasce assegnate
+  const calcolaBlocchi = (id, dayKey, capGiorno) => {
+    const lista = (A[id][dayKey] || []).slice().sort((a,b) => a.s - b.s);
+    const uniti = [];
+    lista.forEach(f => {
+      const u = uniti[uniti.length-1];
+      if(u && f.s === u.e){ u.e = f.e; if(f.oltreCapienza) u.oltreCapienza = true }
+      else uniti.push({s:f.s, e:f.e, oltreCapienza:f.oltreCapienza});
     });
-  });
+    let tot = uniti.reduce((t,b) => t + (b.e-b.s), 0);
+    for(let i = uniti.length-1; i >= 0 && tot > capGiorno; i--){
+      const b = uniti[i];
+      const taglio = Math.min(tot - capGiorno, (b.e-b.s) - MIN_FASCIA_H*60);
+      if(taglio > 0){ b.e -= taglio; tot -= taglio }
+    }
+    const finali = [];
+    uniti.forEach(b => {
+      const spazio = b.e - b.s;
+      if(spazio <= MAX_CONSEC_M){ finali.push(b); return }
+      let lavoro = Math.min(spazio, capGiorno);
+      if(spazio - lavoro < PAUSA_M) lavoro = spazio - PAUSA_M;
+      if(lavoro <= MAX_CONSEC_M){
+        finali.push({s:b.s, e:b.s + Math.max(lavoro, MIN_FASCIA_H*60), oltreCapienza:b.oltreCapienza});
+        return;
+      }
+      const t1 = Math.min(Math.ceil(lavoro/2), MAX_CONSEC_M);
+      const t2 = Math.min(lavoro - t1, MAX_CONSEC_M);
+      finali.push({s:b.s, e:b.s + t1, oltreCapienza:b.oltreCapienza});
+      const inizio2 = b.s + t1 + PAUSA_M;
+      if(t2 >= MIN_FASCIA_H*60 && inizio2 + t2 <= b.e)
+        finali.push({s:inizio2, e:inizio2 + t2, oltreCapienza:b.oltreCapienza});
+    });
+    return finali;
+  };
+  const oreReali = (id, cap) => Object.keys(A[id]).reduce((t,k) =>
+    t + calcolaBlocchi(id, k, cap).reduce((x,b) => x + (b.e-b.s)/60, 0), 0);
 
-  // taglio delle ore eccedenti il contratto
+  // aggiunge una fascia libera al dipendente; ritorna true se ci riesce
+  const aggiungiFascia = (emp, rispettaCapienza) => {
+    const giorni = giorniLavoro(emp).filter(k => k !== 'sun'
+      && fasceDi(emp.id,k).length < fasceDelGiorno(k).length);
+    let best = null;
+    giorni.forEach(k => fasceDelGiorno(k).forEach(f => {
+      if(fasceDi(emp.id,k).some(x => x.id === f.id)) return;
+      const pieno = presenti(k, f.id) >= capienza;
+      if(rispettaCapienza && pieno) return;
+      const punteggio = presenti(k, f.id) + contaFasce[emp.id][f.id] + (pieno ? 10 : 0);
+      if(!best || punteggio < best.punteggio) best = {k, f, punteggio, pieno};
+    }));
+    if(!best) return false;
+    occupa(emp.id, best.k, {id:best.f.id, s:best.f.s, e:best.f.e,
+                            oltreCapienza: best.pieno || undefined});
+    registra(emp.id, best.f);
+    return true;
+  };
+
+  // tetto giornaliero per dipendente: si alza solo se serve a chiudere le ore
+  const capDi = {};
+  flex.forEach(e => capDi[e.id] = MAX_GIORNO_M);
+
   flex.forEach(emp => {
-    const maxH = empMaxH(emp);
-    if(maxH <= 0) return;
-    let extra = Math.round((oreDi(emp.id) - maxH) * 60);
-    if(extra <= 0) return;
-    // si accorciano prima i giorni più carichi, mai sotto 2h di presenza
-    const giorni = Object.keys(A[emp.id])
-      .filter(k => k !== 'sun')
-      .sort((a,b) => {
-        const ha = A[emp.id][b].reduce((t,x)=>t+(x.e-x.s),0);
-        const hb = A[emp.id][a].reduce((t,x)=>t+(x.e-x.s),0);
-        return ha - hb;
-      });
-    for(const k of giorni){
-      if(extra <= 0) break;
-      const blocchi = A[emp.id][k].slice().sort((a,b) => (b.e-b.s) - (a.e-a.s));
-      for(const b of blocchi){
-        if(extra <= 0) break;
-        const durata = b.e - b.s;
-        const tagliabile = Math.max(0, durata - MIN_FASCIA_H*60);
-        const taglio = Math.min(tagliabile, extra);
-        if(taglio < 15) continue;
-        b.e -= taglio;
-        extra -= taglio;
+    const target = empMaxH(emp);
+    if(target <= 0) return;
+    // 1° giro: rispettando il limite di contemporaneità
+    // 2° giro: superandolo (sovrapposizioni segnalate)
+    // 3° giro: alzando anche il tetto giornaliero a 10h
+    let guardia = 0;
+    for(const modo of ['capienza','sovrapponi','giornata']){
+      if(modo === 'giornata'){
+        if(oreReali(emp.id, capDi[emp.id]) >= target - 0.01) break;
+        capDi[emp.id] = 600;
+      }
+      while(oreReali(emp.id, capDi[emp.id]) < target - 0.01 && guardia++ < 60){
+        if(!aggiungiFascia(emp, modo === 'capienza')) break;
       }
     }
   });
+
+  /* ore in eccesso: si accorciano i turni fino al monte ore contrattuale.
+     Richiamata anche dopo il turno camion, che allunga la giornata.       */
+  avail.forEach(emp => {
+    const cap = capDi[emp.id] || MAX_GIORNO_M;
+    Object.keys(A[emp.id]).forEach(k => { A[emp.id][k] = calcolaBlocchi(emp.id, k, cap) });
+  });
+  const tagliaEccedenza = () => {
+    flex.forEach(emp => {
+      const target = empMaxH(emp);
+      if(target <= 0) return;
+      const ore = () => Object.keys(A[emp.id]).reduce((t,k) =>
+        t + A[emp.id][k].reduce((x,b) => x + (b.e-b.s)/60, 0), 0);
+      let extra = Math.round((ore() - target) * 60);
+      if(extra <= 0) return;
+      const giorni = Object.keys(A[emp.id]).filter(k => k !== 'sun')
+        .sort((a,b) => A[emp.id][b].reduce((t,x)=>t+(x.e-x.s),0)
+                     - A[emp.id][a].reduce((t,x)=>t+(x.e-x.s),0));
+      for(const k of giorni){
+        if(extra <= 0) break;
+        for(const b of A[emp.id][k].slice().sort((x,y) => (y.e-y.s) - (x.e-x.s))){
+          if(extra <= 0) break;
+          // chi entra col camion alle 07:00 resta comunque fino alle 11:00
+          const minimo = b.s <= t2m('07:00') ? Math.max(MIN_FASCIA_H*60, t2m('11:00') - b.s) : MIN_FASCIA_H*60;
+          const taglio = Math.min(Math.max(0, (b.e-b.s) - minimo), extra);
+          if(taglio < 15) continue;
+          b.e -= taglio; extra -= taglio;
+        }
+      }
+    });
+  };
+  tagliaEccedenza();
 
   /* ═══ 8. CAMION ═══════════════════════════════════════════════════
      Nei giorni di consegna chi la riceve entra alle 07:00 e resta
@@ -1293,6 +1310,8 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     // anche entrando alle 07:00 restano validi i limiti: max 6h consecutive
     if(primo.e - primo.s > 360) primo.e = primo.s + 360;
   });
+
+  tagliaEccedenza();   // il camion ha allungato la giornata: si rilivella
 
   /* ═══ 9. TURNI FISSI + DIRETTORE ══════════════════════════════════ */
   [...fissi, ...direttori].forEach(emp => {
@@ -1362,6 +1381,7 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
           areaId    : b.areaId || '',
           hours     : h,
           overtime  : isOT || undefined,
+          sovrapposto: b.oltreCapienza || undefined,
           sundayFull: dayKey === 'sun' ? true : undefined
         });
         worked[emp.id] = prima + h;
@@ -1378,12 +1398,24 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     const maxH = empMaxH(e);
     if(maxH <= 0) return;
     const mancano = Math.round((maxH - worked[e.id]) * 10)/10;
-    if(mancano > 0.5)
-      warnings.push(`${weekRange(weekStartISO)}: ${e.name} — ${mancano}h mancanti (${Math.round(worked[e.id]*10)/10}h su ${maxH}h contratto).`);
+    if(mancano > 0.5){
+      const giorniUtili = giorniLavoro(e).length;
+      warnings.push(`❗ ${e.name} (${weekRange(weekStartISO)}): ${mancano}h NON assegnate (${Math.round(worked[e.id]*10)/10}h su ${maxH}h di contratto) — con ${giorniUtili} giornate lavorabili e l'orario di apertura attuale non c'è spazio per altre ore.`);
+    }
     const ot = Math.round(overtimeH[e.id] * 10)/10;
     if(ot > 0)
       warnings.push(`📌 STRAORDINARI — ${e.name}: +${ot}h questa settimana.`);
   });
+
+  // sovrapposizioni: turni inseriti oltre il limite di persone in contemporanea
+  // pur di completare le ore da contratto
+  const sovr = [];
+  openDays.forEach(k => sch.days[k].shifts.filter(x => x.sovrapposto).forEach(x => {
+    const e = getEmp(x.employeeId);
+    sovr.push(`${nomeGiorno(k)} ${x.startTime}–${x.endTime} ${e?e.name:''}`);
+  }));
+  if(sovr.length)
+    warnings.push(`👥 ${weekRange(weekStartISO)}: ${sovr.length} turni oltre il limite di ${capienza} persone in contemporanea, inseriti per completare le ore da contratto — ${sovr.join(' · ')}`);
   avail.forEach(emp => {
     const vuoti = giorniLavoro(emp).filter(k => !sch.days[k].shifts.some(s => s.employeeId === emp.id));
     if(vuoti.length)
@@ -1958,9 +1990,10 @@ function renderSchedule(){
         const area=getArea(s.areaId);const color=area?area.color:'#3498DB';
         const otBadge=s.overtime?'<div class="badge-ot">📌 STRAORDINARIO</div>':'';
         const sunBadge=s.sundayFull?'<div class="badge-ot" style="background:#D6EAF8;color:#1B4F72">☀️ Turno domenica</div>':'';
+        const ovlBadge=s.sovrapposto?'<div class="badge-ot" style="background:#FDEBD0;color:#7E5109">👥 Sovrapposizione</div>':'';
         const gapBadge=s.directorGap?'<div class="badge-ot" style="background:#E8DAEF;color:#5B2C6F">🔧 Copertura direttore</div>':'';
         const prefBadge=s.preferred?'<div class="badge-ot" style="background:#FCF3CF;color:#7D6608">⭐ Preferenza</div>':'';
-        return `<div class="shift-chip ${s.overtime?'overtime':''}" style="border-left-color:${color}"><div class="shift-time">${s.startTime}–${s.endTime}</div><div class="shift-area">${area?esc(area.name):'—'}</div>${otBadge}${sunBadge}${gapBadge}${prefBadge}</div>`;
+        return `<div class="shift-chip ${s.overtime?'overtime':''}" style="border-left-color:${color}"><div class="shift-time">${s.startTime}–${s.endTime}</div><div class="shift-area">${area?esc(area.name):'—'}</div>${otBadge}${sunBadge}${ovlBadge}${gapBadge}${prefBadge}</div>`;
       }).join('');
 
       html+=`<td data-day="${key}"><div class="day-cell" ${clickFn} style="${cursor}" ${!isReadOnly?'title="Clicca per modificare"':''}>${shiftsHtml}</div></td>`;
