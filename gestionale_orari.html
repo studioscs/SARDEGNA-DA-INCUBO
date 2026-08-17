@@ -1195,12 +1195,6 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
 
     // chi deve essere presente oggi (esclusi fissi e direttori)
     const oggi = flex.filter(e => giorniLavoro(e).includes(dayKey));
-    // profumeria prima (R4), poi chi ha più ore da coprire
-    oggi.sort((a,b) => {
-      const pa = a.isProfumeria?1:0, pb = b.isProfumeria?1:0;
-      if(pa !== pb) return pb - pa;
-      return empMaxH(b) - empMaxH(a);
-    });
 
     // chi ha il codice dell'allarme viene collocato per primo, sulla fascia che
     // contiene la chiusura, così le ultime due ore sono sempre coperte (R8)
@@ -1217,9 +1211,13 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     const esperteOggi = oggi.filter(e => e.isProfumeria).length;
     let serveProfApertura = esperteOggi > 0 && !avail.some(e => e.isProfumeria &&
       (A[e.id][dayKey]||[]).some(b => b.s <= aperturaM));
+    // ordine di inserimento: prima chi serve per chiusura/apertura (regole
+    // vincolanti), poi le esperte di profumeria (R4: vanno collocate prima
+    // del resto del personale), infine chi ha più ore da coprire.
     oggi.sort((a,b) => (b.canCloseStore?1:0) - (a.canCloseStore?1:0)
                     || (apreNegozio(b)?1:0) - (apreNegozio(a)?1:0)
-                    || (b.isProfumeria?1:0) - (a.isProfumeria?1:0));
+                    || (b.isProfumeria?1:0) - (a.isProfumeria?1:0)
+                    || (empMaxH(b) - empMaxH(a)));
     oggi.forEach(emp => {
       const pref = preferenzaDi(emp, dayKey);
       const vuoleChiusura = emp.canCloseStore && serveChiusura;
@@ -2203,6 +2201,56 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
       const durata = Math.max(ge - gs, MIN_FASCIA_H*60);
       const inizio = Math.min(gs, Math.max(f.s, f.e - durata));
       const fine = Math.min(f.e, inizio + Math.max(durata, MIN_FASCIA_H*60));
+
+      // 0) ricicla un turno già in sovrapposizione (oltre il limite di persone
+      // in contemporanea) invece di aggiungere ore nuove. Un turno sovrapposto
+      // è per definizione superfluo dove si trova: si verifica comunque, tolto
+      // lui, che la copertura minima nel suo punto di origine resti rispettata
+      // — così non si sposta semplicemente il buco altrove.
+      const coperturaSenza = (k2, empId, b) => {
+        for(let m = b.s; m < b.e; m += PASSO_M){
+          const n = avail.filter(e => e.id !== empId &&
+            (A[e.id][k2]||[]).some(x => x.s <= m && x.e > m)).length;
+          if(n < minPersone) return false;
+        }
+        return true;
+      };
+      let riciclato = false;
+      for(const e of avail){
+        if(riciclato) break;
+        if(e.hoursType === 'fixed' || e.isDirectore) continue;
+        if(dayKey === riposo[e.id] || assente(e, dateOf(dayKey))) continue;
+        for(const k2 of Object.keys(A[e.id])){
+          if(k2 === 'sun') continue;
+          const blocchi = A[e.id][k2] || [];
+          // la durata deve entrare nel buco senza essere accorciata: troncarla
+          // farebbe perdere ore che servono a completare il contratto.
+          const candidato = blocchi.find(b => b.oltreCapienza && !b.camion && !b.apertura
+            && !b.chiusura && !b.profumeria && (b.e - b.s) >= MIN_FASCIA_H*60
+            && (b.e - b.s) <= (fine - inizio)
+            && coperturaSenza(k2, e.id, b));
+          if(!candidato) continue;
+          // non si può svuotare del tutto un giorno lavorativo: se il turno
+          // sovrapposto è l'unico di quel giorno, resterebbe una giornata
+          // senza turno, che non è ammessa (non è un giorno di riposo).
+          if(k2 !== dayKey && blocchi.length === 1) continue;
+          const durataBlocco = candidato.e - candidato.s;
+          const altriDelGiorno = (A[e.id][dayKey]||[]).filter(x => x !== candidato || k2 !== dayKey);
+          const sicuro = !altriDelGiorno.some(x =>
+            (x.s < inizio + durataBlocco && inizio < x.e) ||
+            (inizio - x.e > 0 && inizio - x.e < PAUSA_M) ||
+            (x.s - (inizio + durataBlocco) > 0 && x.s - (inizio + durataBlocco) < PAUSA_M));
+          if(!sicuro) continue;
+          const oreGiornoGap = altriDelGiorno.reduce((t,x)=>t+(x.e-x.s),0);
+          if(oreGiornoGap + durataBlocco > MAX_GIORNO_M) continue;
+          A[e.id][k2] = blocchi.filter(x => x !== candidato);
+          (A[e.id][dayKey] = A[e.id][dayKey] || []).push({s:inizio, e:inizio + durataBlocco});
+          riciclato = true;
+          break;
+        }
+      }
+      if(riciclato) continue;
+
       // 1) allunga un turno che confina col buco: non aggiunge persone in campo
       let allungato = false;
       for(const e of avail){
@@ -2249,11 +2297,13 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
   riordinaTurni();   // ultimo assestamento dopo le coperture
   coprireProfumeria();   // ultima parola alla regola numero uno: profumeria coperta
 
-  /* ═══ 10. AREE ════════════════════════════════════════════════════ */
-  const nonMag = S.areas.filter(a => !isMagazzino(a));
-  const mag    = S.areas.filter(a => isMagazzino(a));
+  /* ═══ 10. AREE ════════════════════════════════════════════════════
+     Priorità di riempimento: profumeria (passo 1, sotto), poi
+     magazzino-vendita, infine le altre aree (cassa e simili).        */
+  const mag    = S.areas.filter(isMagazzino);
+  const altre  = S.areas.filter(a => !isMagazzino(a) && !isProfArea(a));
   const areaProf = S.areas.find(isProfArea);
-  const ordinate = [...nonMag, ...mag];
+  const ordinate = [...mag, ...altre, ...(areaProf ? [areaProf] : [])];
   if(!S.areas.length)
     warnings.push('⚠️ Nessuna area configurata — i turni non hanno area assegnata.');
 
