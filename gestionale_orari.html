@@ -180,7 +180,8 @@ textarea.form-control{resize:vertical;min-height:64px}
 .auth-change{font-size:11px;color:var(--muted);margin-top:14px;cursor:pointer;text-decoration:underline}
 .auth-change:hover{color:var(--accent)}
 /* ── STRAORDINARI BADGE ── */
-.shift-chip.overtime{border-left-color:#E67E22;background:#FEF0E0}
+.shift-chip.overtime{border-left-color:#C0392B;background:#FDEDEC;box-shadow:inset 0 0 0 1px #F5B7B1}
+.shift-chip.overtime .shift-time{color:#922B21}
 .badge-ot{background:#FDEBD0;color:#784212;font-size:10px;font-weight:700;padding:1px 5px;border-radius:8px;display:inline-block;margin-top:2px}
 /* ── CHECK ORARI: TAB + COPERTURA AREE ── */
 .co-tab-btn{background:#fff;border:1px solid var(--border);border-radius:6px;padding:7px 14px;cursor:pointer;font-size:12px;font-weight:700;color:var(--muted);transition:all 120ms}
@@ -353,6 +354,7 @@ textarea.form-control{resize:vertical;min-height:64px}
           <li>Massimo <strong>8 ore al giorno</strong> e <strong>6 ore consecutive</strong>, poi pausa di almeno 2 ore</li>
           <li>Chi riceve il camion entra alle <strong>07:00</strong> e resta almeno fino alle 11:00</li>
           <li><strong>Chiusura</strong>: le ultime 2 ore prima della chiusura sono sempre coperte da almeno una persona <strong>abilitata alla chiusura</strong> (spunta 🔐 nella scheda dipendente, chi ha il codice dell'allarme)</li>
+          <li><strong>Carenza di personale</strong>: se i dipendenti disponibili non bastano a coprire una fascia, vengono aggiunte <strong>ore fuori contratto (straordinari)</strong> pur di non lasciare il negozio scoperto — i turni extra sono evidenziati in rosso con il badge 📌 STRAORDINARIO ed elencati negli avvisi</li>
           <li><strong>Ore da contratto completate ogni settimana</strong>: nessuno chiude la settimana sotto il proprio monte ore. Se lo spazio non basta, i turni vengono <strong>sovrapposti</strong> superando il limite di persone in contemporanea — le sovrapposizioni sono marcate 👥 nell'orario ed elencate negli avvisi</li>
           <li>Ferie, permessi e assenze rispettati automaticamente</li>
           <li>Il direttore copre le fasce scoperte (max 3h al giorno, mai di domenica)</li>
@@ -1304,6 +1306,7 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
         if(extra <= 0) break;
         for(const b of A[emp.id][k].slice().sort((x,y) => (y.e-y.s) - (x.e-x.s))){
           if(extra <= 0) break;
+          if(b.straordinario) continue;   // ore extra volute per coprire il negozio
           // chi entra col camion alle 07:00 resta comunque fino alle 11:00
           const minimo = b.s <= t2m('07:00') ? Math.max(MIN_FASCIA_H*60, t2m('11:00') - b.s) : MIN_FASCIA_H*60;
           const taglio = Math.min(Math.max(0, (b.e-b.s) - minimo), extra);
@@ -1397,6 +1400,62 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
   });
 
   tagliaEccedenza();   // il camion ha allungato la giornata: si rilivella
+
+  /* ═══ 10. COPERTURA MINIMA DEL NEGOZIO — con straordinari ═══════════
+     Se il personale non basta a coprire una fascia (mattina o
+     pomeriggio) si aggiungono ore OLTRE il contratto: meglio uno
+     straordinario che il negozio scoperto. Le ore extra sono marcate
+     come straordinario, mostrate in arancione con il badge 📌 ed
+     elencate negli avvisi. Non vengono mai assegnate nel giorno di
+     riposo né durante ferie, permessi o assenze.                    */
+  const areeObbligatorie = S.areas.filter(a => !isMagazzino(a));
+  const minPersone = Math.max(1, areeObbligatorie.reduce((t,a) => t + Math.max(1, a.minCoverage||1), 0));
+
+  openDays.forEach(dayKey => {
+    const fasce = fasceDelGiorno(dayKey);
+    fasce.forEach(f => {
+      const presentiOra = () => avail.filter(e =>
+        (A[e.id][dayKey]||[]).some(b => b.s < f.e && b.e > f.s)).length;
+      let guardia = 0;
+      while(presentiOra() < minPersone && guardia++ < 10){
+        const disponibile = e => dayKey !== riposo[e.id] && !assente(e, dateOf(dayKey))
+          && !(A[e.id][dayKey]||[]).some(b => b.s < f.e && b.e > f.s);
+        const candidati = avail.filter(disponibile).sort((a,b) => {
+          // prima chi ha meno straordinari, poi chi è già in turno quel giorno
+          const sa = Math.max(0, (worked[a.id]||0)) - empMaxH(a);
+          const sb = Math.max(0, (worked[b.id]||0)) - empMaxH(b);
+          const oa = (overtimeH[a.id]||0) + (sa > 0 ? sa : 0);
+          const ob = (overtimeH[b.id]||0) + (sb > 0 ? sb : 0);
+          if(Math.abs(oa - ob) > 0.01) return oa - ob;
+          const ga = (A[a.id][dayKey]||[]).length ? 0 : 1;
+          const gb = (A[b.id][dayKey]||[]).length ? 0 : 1;
+          return ga - gb;
+        });
+        let inserito = false;
+        for(const emp of candidati){
+          const blocchi = (A[emp.id][dayKey] = A[emp.id][dayKey] || []).sort((a,b) => a.s - b.s);
+          // rispetta la pausa di 2h dagli altri turni della giornata
+          let ini = f.s, fine = Math.min(f.e, f.s + MAX_CONSEC_M);
+          const prima = blocchi.filter(b => b.e <= f.s).pop();
+          const dopo  = blocchi.filter(b => b.s >= f.e)[0];
+          if(prima && ini - prima.e < PAUSA_M) ini = prima.e + PAUSA_M;
+          if(dopo && dopo.s - fine < PAUSA_M) fine = dopo.s - PAUSA_M;
+          if(fine - ini < MIN_FASCIA_H*60) continue;
+          const target = empMaxH(emp);
+          const extra = target > 0 && (worked[emp.id]||0) >= target;   // oltre contratto?
+          blocchi.push({s:ini, e:fine, straordinario:true,
+                        oltreCapienza: presentiOra() >= capienza || undefined});
+          worked[emp.id] = (worked[emp.id]||0) + (fine-ini)/60;
+          inserito = true;
+          break;
+        }
+        if(!inserito){
+          warnings.push(`🔴 ${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}) ${m2t(f.s)}–${m2t(f.e)}: personale insufficiente — servono ${minPersone} persone, disponibili ${presentiOra()}. Nessun altro dipendente utilizzabile (riposo, ferie o assenze).`);
+          break;
+        }
+      }
+    });
+  });
 
   /* ═══ 10. CHIUSURA — R8 ═══════════════════════════════════════════
      Le ultime due ore di apertura devono essere coperte da almeno una
@@ -1499,7 +1558,7 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
         const h = (b.e - b.s)/60;
         if(h <= 0) return;
         const prima = worked[emp.id];
-        const isOT = maxH > 0 && prima + h > maxH;
+        const isOT = (maxH > 0 && prima + h > maxH) || (b.straordinario && maxH > 0 && prima >= maxH - 0.01);
         sch.days[dayKey].shifts.push({
           employeeId: emp.id,
           startTime : m2t(b.s),
@@ -1510,6 +1569,7 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
           sovrapposto: b.oltreCapienza || undefined,
           camion    : b.camion || undefined,
           chiusura  : (b.chiusura || (getEmp(emp.id).canCloseStore && b.e >= t2m(S.storeHours[dayKey].ae))) || undefined,
+          coperturaExtra: b.straordinario || undefined,
           sundayFull: dayKey === 'sun' ? true : undefined
         });
         worked[emp.id] = prima + h;
@@ -1531,8 +1591,14 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
       warnings.push(`❗ ${e.name} (${weekRange(weekStartISO)}): ${mancano}h NON assegnate (${Math.round(worked[e.id]*10)/10}h su ${maxH}h di contratto) — con ${giorniUtili} giornate lavorabili e l'orario di apertura attuale non c'è spazio per altre ore.`);
     }
     const ot = Math.round(overtimeH[e.id] * 10)/10;
-    if(ot > 0)
-      warnings.push(`📌 STRAORDINARI — ${e.name}: +${ot}h questa settimana.`);
+    if(ot > 0){
+      let extraCop = 0;
+      openDays.forEach(k => sch.days[k].shifts
+        .filter(x => x.employeeId === e.id && x.coperturaExtra)
+        .forEach(x => extraCop += x.hours || 0));
+      extraCop = Math.round(extraCop*10)/10;
+      warnings.push(`📌 STRAORDINARI — ${e.name}: +${ot}h oltre le ${maxH}h di contratto${extraCop>0?` (di cui ${extraCop}h aggiunte per coprire il negozio in carenza di personale)`:''}.`);
+    }
   });
 
   // sovrapposizioni: turni inseriti oltre il limite di persone in contemporanea
@@ -2161,7 +2227,7 @@ function renderSchedule(){
 
       const shiftsHtml=shifts.map(s=>{
         const area=getArea(s.areaId);const color=area?area.color:'#3498DB';
-        const otBadge=s.overtime?'<div class="badge-ot">📌 STRAORDINARIO</div>':'';
+        const otBadge=s.overtime?`<div class="badge-ot" style="background:#F5B7B1;color:#7B241C">📌 STRAORDINARIO${s.coperturaExtra?' (copertura)':''}</div>`:'';
         const sunBadge=s.sundayFull?'<div class="badge-ot" style="background:#D6EAF8;color:#1B4F72">☀️ Turno domenica</div>':'';
         const ovlBadge=s.sovrapposto?'<div class="badge-ot" style="background:#FDEBD0;color:#7E5109">👥 Sovrapposizione</div>':'';
         const camBadge=s.camion?'<div class="badge-ot" style="background:#FCF3CF;color:#7D6608">🚚 Camion 07:00</div>':'';
@@ -2183,6 +2249,7 @@ function renderSchedule(){
     <span class="legend-item"><span style="width:12px;height:12px;background:#FFF;border:1px solid #DEE2E6;border-radius:2px;display:inline-block"></span>Nessun turno (non è riposo)</span>
     <span class="legend-item">🚚 Camion (apertura 07:00)</span>
     <span class="legend-item">🔐 Abilitato alla chiusura</span>
+    <span class="legend-item"><span style="width:12px;height:12px;background:#FDEDEC;border:1px solid #C0392B;border-radius:2px;display:inline-block"></span>Straordinario (ore fuori contratto)</span>
     <span class="legend-item">👥 Turno sovrapposto (per completare le ore)</span>
     <span class="legend-item"><span style="width:12px;height:12px;background:#FEF0F0;border:1px solid #F5C6CB;border-radius:2px;display:inline-block"></span>Assenza</span>
     <span class="legend-item"><span style="width:12px;height:12px;background:#FFF5F5;border:1px solid #FADBD8;border-radius:2px;display:inline-block"></span>Ferie</span>
