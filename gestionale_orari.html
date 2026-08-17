@@ -352,6 +352,7 @@ textarea.form-control{resize:vertical;min-height:64px}
           <li>Turni sempre <strong>dentro l'orario del negozio</strong>, mai a cavallo della pausa pranzo</li>
           <li>Massimo <strong>8 ore al giorno</strong> e <strong>6 ore consecutive</strong>, poi pausa di almeno 2 ore</li>
           <li>Chi riceve il camion entra alle <strong>07:00</strong> e resta almeno fino alle 11:00</li>
+          <li><strong>Chiusura</strong>: le ultime 2 ore prima della chiusura sono sempre coperte da almeno una persona <strong>abilitata alla chiusura</strong> (spunta 🔐 nella scheda dipendente, chi ha il codice dell'allarme)</li>
           <li><strong>Ore da contratto completate ogni settimana</strong>: nessuno chiude la settimana sotto il proprio monte ore. Se lo spazio non basta, i turni vengono <strong>sovrapposti</strong> superando il limite di persone in contemporanea — le sovrapposizioni sono marcate 👥 nell'orario ed elencate negli avvisi</li>
           <li>Ferie, permessi e assenze rispettati automaticamente</li>
           <li>Il direttore copre le fasce scoperte (max 3h al giorno, mai di domenica)</li>
@@ -759,6 +760,7 @@ function renderEmployees(){
     if(e.isProfumeria)chars.push('<span class="badge b-purple">🌸 Profumeria</span>');
     if(e.canOpenStore)chars.push('<span class="badge b-blue">🔑 Apertura</span>');
     if(e.takesMorningDelivery)chars.push('<span class="badge b-yellow">🚚 Camion 7:00</span>');
+    if(e.canCloseStore)chars.push('<span class="badge b-purple">🔐 Chiusura</span>');
     (e.customChars||[]).forEach(c=>chars.push(`<span class="badge b-gray">${esc(c)}</span>`));
     const vacPills=(e.vacations||[]).map(v=>`<span class="vac-pill">${v.from} – ${v.to}${v.note?' ('+esc(v.note)+')':''}</span>`).join('');
     const doff=(e.daysOff||[]).map(d=>`<span class="day-pill">${d}</span>`).join(' ');
@@ -1048,6 +1050,10 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     const espertaSun = ordinati.find(e => e.isProfumeria);
     const giaProf = [...sunWorkers].some(id => (getEmp(id)||{}).isProfumeria);
     if(espertaSun && !giaProf && sunWorkers.size < SUN_WORKERS) sunWorkers.add(espertaSun.id);
+    // R8: almeno una persona abilitata alla chiusura in turno la domenica
+    const chiudeSun = ordinati.find(e => e.canCloseStore);
+    const giaChiude = [...sunWorkers].some(id => (getEmp(id)||{}).canCloseStore);
+    if(chiudeSun && !giaChiude && sunWorkers.size < SUN_WORKERS) sunWorkers.add(chiudeSun.id);
     for(const e of ordinati){
       if(sunWorkers.size >= SUN_WORKERS) break;
       sunWorkers.add(e.id);
@@ -1061,10 +1067,12 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
   const riposo = {};                       // empId → dayKey
   const contaRiposi = {}; feriali.forEach(k => contaRiposi[k] = 0);
   const contaProfRiposi = {}; feriali.forEach(k => contaProfRiposi[k] = 0);
+  const contaCloseRiposi = {}; feriali.forEach(k => contaCloseRiposi[k] = 0);
 
   // ordine: prima le esperte di profumeria, così i loro riposi si
   // distribuiscono su giorni diversi (R4)
-  const ordineRiposi = [...avail].sort((a,b) => (b.isProfumeria?1:0) - (a.isProfumeria?1:0));
+  const ordineRiposi = [...avail].sort((a,b) =>
+    ((b.isProfumeria?2:0) + (b.canCloseStore?1:0)) - ((a.isProfumeria?2:0) + (a.canCloseStore?1:0)));
 
   ordineRiposi.forEach(emp => {
     // chi NON lavora la domenica riposa di domenica
@@ -1087,14 +1095,15 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     }
     const ultimo = restHistory[emp.id];
     pool.sort((a,b) => {
-      const pa = (a === ultimo ? 100 : 0) + contaRiposi[a] + (emp.isProfumeria ? contaProfRiposi[a]*50 : 0);
-      const pb = (b === ultimo ? 100 : 0) + contaRiposi[b] + (emp.isProfumeria ? contaProfRiposi[b]*50 : 0);
+      const pa = (a === ultimo ? 100 : 0) + contaRiposi[a] + (emp.isProfumeria ? contaProfRiposi[a]*50 : 0) + (emp.canCloseStore ? contaCloseRiposi[a]*50 : 0);
+      const pb = (b === ultimo ? 100 : 0) + contaRiposi[b] + (emp.isProfumeria ? contaProfRiposi[b]*50 : 0) + (emp.canCloseStore ? contaCloseRiposi[b]*50 : 0);
       if(pa !== pb) return pa - pb;
       return DAYS_KEY.indexOf(a) - DAYS_KEY.indexOf(b);
     });
     riposo[emp.id] = pool[0];
     contaRiposi[pool[0]]++;
     if(emp.isProfumeria) contaProfRiposi[pool[0]]++;
+    if(emp.canCloseStore) contaCloseRiposi[pool[0]]++;
   });
 
   avail.forEach(e => {
@@ -1143,9 +1152,21 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
       return empMaxH(b) - empMaxH(a);
     });
 
+    // chi ha il codice dell'allarme viene collocato per primo, sulla fascia che
+    // contiene la chiusura, così le ultime due ore sono sempre coperte (R8)
+    const chiusuraM = t2m(S.storeHours[dayKey].ae);
+    let serveChiusura = !avail.some(e => e.canCloseStore &&
+      (A[e.id][dayKey]||[]).some(b => b.e >= chiusuraM));
+    oggi.sort((a,b) => (b.canCloseStore?1:0) - (a.canCloseStore?1:0)
+                    || (b.isProfumeria?1:0) - (a.isProfumeria?1:0));
     oggi.forEach(emp => {
       const pref = preferenzaDi(emp, dayKey);
+      const vuoleChiusura = emp.canCloseStore && serveChiusura;
       const scelte = [...fasce].sort((f1,f2) => {
+        if(vuoleChiusura){
+          if(f1.e >= chiusuraM) return -1;
+          if(f2.e >= chiusuraM) return 1;
+        }
         if(pref){ if(f1.id === pref) return -1; if(f2.id === pref) return 1 }
         // alternanza: la fascia fatta meno volte passa avanti
         const d = contaFasce[emp.id][f1.id] - contaFasce[emp.id][f2.id];
@@ -1160,6 +1181,7 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
         presenti(dayKey,f1.id) - presenti(dayKey,f2.id))[0];
       occupa(emp.id, dayKey, scelta);
       registra(emp.id, scelta);
+      if(emp.canCloseStore && scelta.e >= chiusuraM) serveChiusura = false;
       if(!libera)
         warnings.push(`${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}): ${emp.name} inserito oltre il limite di ${capienza} persone in contemporanea per non lasciare la giornata senza turno.`);
     });
@@ -1286,7 +1308,10 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
           const minimo = b.s <= t2m('07:00') ? Math.max(MIN_FASCIA_H*60, t2m('11:00') - b.s) : MIN_FASCIA_H*60;
           const taglio = Math.min(Math.max(0, (b.e-b.s) - minimo), extra);
           if(taglio < 15) continue;
-          b.e -= taglio; extra -= taglio;
+          // i turni di chiusura si accorciano dall'inizio: la fine deve restare
+          // sull'orario di chiusura del negozio
+          if(b.chiusura) b.s += taglio; else b.e -= taglio;
+          extra -= taglio;
         }
       }
     });
@@ -1373,6 +1398,71 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
 
   tagliaEccedenza();   // il camion ha allungato la giornata: si rilivella
 
+  /* ═══ 10. CHIUSURA — R8 ═══════════════════════════════════════════
+     Le ultime due ore di apertura devono essere coperte da almeno una
+     persona abilitata alla chiusura (chi ha il codice dell'allarme).
+     Se nessuna è già in turno in quella fascia, si sposta o si aggiunge
+     il turno di una abilitata disponibile quel giorno.               */
+  const ORE_CHIUSURA_M = 120;   // ultime 2 ore
+  const abilitatiChiusura = avail.filter(e => e.canCloseStore);
+  if(!abilitatiChiusura.length && S.employees.some(e => e.canCloseStore))
+    warnings.push(`🔐 ${weekRange(weekStartISO)}: nessuna persona abilitata alla chiusura è disponibile questa settimana.`);
+
+  openDays.forEach(dayKey => {
+    const sh = S.storeHours[dayKey];
+    const chiusura = t2m(sh.ae);
+    const daQuando = Math.max(chiusura - ORE_CHIUSURA_M, t2m(sh.type === 'split' ? sh.as : sh.ms));
+    const copre = e => (A[e.id][dayKey]||[]).some(b => b.s <= daQuando && b.e >= chiusura);
+
+    const giaOk = abilitatiChiusura.find(copre);
+    if(giaOk){
+      (A[giaOk.id][dayKey]||[]).filter(b => b.e >= chiusura).forEach(b => b.chiusura = true);
+      return;
+    }
+    if(!abilitatiChiusura.length) return;
+
+    const disponibile = e => dayKey !== riposo[e.id] && !assente(e, dateOf(dayKey));
+    const candidati = abilitatiChiusura.filter(disponibile);
+    if(!candidati.length){
+      warnings.push(`🔐 ${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}): nessuna persona abilitata alla chiusura disponibile — ultime 2 ore scoperte.`);
+      return;
+    }
+    // preferisci chi ha già un turno nel pomeriggio (basta spostarlo), poi chi lavora
+    // quel giorno, infine chi è comunque disponibile
+    candidati.sort((a,b) => {
+      const va = (A[a.id][dayKey]||[]).some(x => x.e > daQuando) ? 0
+               : (A[a.id][dayKey]||[]).length ? 1 : 2;
+      const vb = (A[b.id][dayKey]||[]).some(x => x.e > daQuando) ? 0
+               : (A[b.id][dayKey]||[]).length ? 1 : 2;
+      return va - vb;
+    });
+    const scelto = candidati[0];
+    const blocchi = (A[scelto.id][dayKey] = A[scelto.id][dayKey] || []).sort((a,b) => a.s - b.s);
+    const serale = blocchi.filter(b => b.e > daQuando).pop()
+                || blocchi.filter(b => b.s >= t2m(sh.type === 'split' ? sh.as : sh.ms)).pop();
+
+    if(serale && serale.e < chiusura && serale.s < chiusura){
+      // sposta il turno in avanti mantenendo la durata: le ore non cambiano
+      const durata = serale.e - serale.s;
+      const nuovoS = Math.max(chiusura - Math.max(durata, ORE_CHIUSURA_M),
+                              t2m(sh.type === 'split' ? sh.as : sh.ms));
+      const precedente = blocchi.filter(b => b !== serale && b.e <= serale.s).pop();
+      serale.s = precedente ? Math.max(nuovoS, precedente.e + PAUSA_M) : nuovoS;
+      serale.e = chiusura;
+      serale.chiusura = true;
+    } else {
+      // nessun turno utile: se ne aggiunge uno sulle ultime 2 ore
+      const mattutino = blocchi.filter(b => b.e <= daQuando).pop();
+      let inizio = daQuando;
+      if(mattutino && inizio - mattutino.e < PAUSA_M) inizio = mattutino.e + PAUSA_M;
+      if(inizio < chiusura) blocchi.push({s:inizio, e:chiusura, chiusura:true});
+      else warnings.push(`🔐 ${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}): impossibile coprire le ultime 2 ore con una persona abilitata alla chiusura.`);
+    }
+    if(!scelto.canCloseStore) return;
+  });
+
+  tagliaEccedenza();   // rilivella dopo gli spostamenti di chiusura
+
   /* ═══ 10. AREE ════════════════════════════════════════════════════ */
   const nonMag = S.areas.filter(a => !isMagazzino(a));
   const mag    = S.areas.filter(a => isMagazzino(a));
@@ -1419,6 +1509,7 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
           overtime  : isOT || undefined,
           sovrapposto: b.oltreCapienza || undefined,
           camion    : b.camion || undefined,
+          chiusura  : (b.chiusura || (getEmp(emp.id).canCloseStore && b.e >= t2m(S.storeHours[dayKey].ae))) || undefined,
           sundayFull: dayKey === 'sun' ? true : undefined
         });
         worked[emp.id] = prima + h;
@@ -1459,6 +1550,19 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
       warnings.push(`⚠️ ${emp.name} (${weekRange(weekStartISO)}): ${vuoti.map(nomeGiorno).join(', ')} senza turno${emp.hoursType==='fixed'?' — completare l\'orario fisso nella scheda del dipendente':''}.`);
   });
 
+  // controllo finale: ultime 2 ore coperte da chi è abilitato alla chiusura
+  if(S.employees.some(e => e.canCloseStore)){
+    openDays.forEach(k => {
+      const sh = S.storeHours[k];
+      const chiusura = t2m(sh.ae), da = chiusura - ORE_CHIUSURA_M;
+      const ok = sch.days[k].shifts.some(x => {
+        const e = getEmp(x.employeeId);
+        return e && e.canCloseStore && t2m(x.startTime) <= da && t2m(x.endTime) >= chiusura;
+      });
+      if(!ok) warnings.push(`🔐 ${nomeGiorno(k)} (${weekRange(weekStartISO)}): le ultime 2 ore (${m2t(da)}–${m2t(chiusura)}) NON sono coperte da una persona abilitata alla chiusura.`);
+    });
+  }
+
   // controllo finale: ogni giorno con camion ha una presenza dalle 07:00
   openDays.forEach(k => {
     if(!(S.camionDays && S.camionDays[k])) return;
@@ -1484,6 +1588,19 @@ function verificaRegole(sch){
   const ws = new Date(sch.weekStart+'T00:00:00');
   const openDays = DAYS_KEY.filter(k => S.storeHours[k] && S.storeHours[k].open && sch.days[k]);
   const dateOf = k => isoDate(addDays(ws, DAYS_KEY.indexOf(k)));
+
+  // ultime 2 ore coperte da chi è abilitato alla chiusura
+  if(S.employees.some(e => e.canCloseStore)){
+    openDays.forEach(k => {
+      const sh = S.storeHours[k];
+      const chiusura = t2m(sh.ae), da = chiusura - 120;
+      const ok = sch.days[k].shifts.some(x => {
+        const e = getEmp(x.employeeId);
+        return e && e.canCloseStore && t2m(x.startTime) <= da && t2m(x.endTime) >= chiusura;
+      });
+      if(!ok) errori.push(`🔐 <strong>${DAYS_FULL[DAYS_KEY.indexOf(k)]}</strong>: ultime 2 ore (${m2t(da)}–${m2t(chiusura)}) senza personale abilitato alla chiusura.`);
+    });
+  }
 
   // giorni con arrivo camion: serve una presenza dalle 07:00
   openDays.forEach(k => {
@@ -2048,9 +2165,10 @@ function renderSchedule(){
         const sunBadge=s.sundayFull?'<div class="badge-ot" style="background:#D6EAF8;color:#1B4F72">☀️ Turno domenica</div>':'';
         const ovlBadge=s.sovrapposto?'<div class="badge-ot" style="background:#FDEBD0;color:#7E5109">👥 Sovrapposizione</div>':'';
         const camBadge=s.camion?'<div class="badge-ot" style="background:#FCF3CF;color:#7D6608">🚚 Camion 07:00</div>':'';
+        const clsBadge=s.chiusura?'<div class="badge-ot" style="background:#E8DAEF;color:#5B2C6F">🔐 Chiusura</div>':'';
         const gapBadge=s.directorGap?'<div class="badge-ot" style="background:#E8DAEF;color:#5B2C6F">🔧 Copertura direttore</div>':'';
         const prefBadge=s.preferred?'<div class="badge-ot" style="background:#FCF3CF;color:#7D6608">⭐ Preferenza</div>':'';
-        return `<div class="shift-chip ${s.overtime?'overtime':''}" style="border-left-color:${color}"><div class="shift-time">${s.startTime}–${s.endTime}</div><div class="shift-area">${area?esc(area.name):'—'}</div>${otBadge}${sunBadge}${ovlBadge}${camBadge}${gapBadge}${prefBadge}</div>`;
+        return `<div class="shift-chip ${s.overtime?'overtime':''}" style="border-left-color:${color}"><div class="shift-time">${s.startTime}–${s.endTime}</div><div class="shift-area">${area?esc(area.name):'—'}</div>${otBadge}${sunBadge}${ovlBadge}${camBadge}${clsBadge}${gapBadge}${prefBadge}</div>`;
       }).join('');
 
       html+=`<td data-day="${key}"><div class="day-cell" ${clickFn} style="${cursor}" ${!isReadOnly?'title="Clicca per modificare"':''}>${shiftsHtml}</div></td>`;
@@ -2064,6 +2182,7 @@ function renderSchedule(){
     <span class="legend-item"><span style="width:12px;height:12px;background:#FFFBF0;border:1px solid #FFEEBA;border-radius:2px;display:inline-block"></span>Riposo</span>
     <span class="legend-item"><span style="width:12px;height:12px;background:#FFF;border:1px solid #DEE2E6;border-radius:2px;display:inline-block"></span>Nessun turno (non è riposo)</span>
     <span class="legend-item">🚚 Camion (apertura 07:00)</span>
+    <span class="legend-item">🔐 Abilitato alla chiusura</span>
     <span class="legend-item">👥 Turno sovrapposto (per completare le ore)</span>
     <span class="legend-item"><span style="width:12px;height:12px;background:#FEF0F0;border:1px solid #F5C6CB;border-radius:2px;display:inline-block"></span>Assenza</span>
     <span class="legend-item"><span style="width:12px;height:12px;background:#FFF5F5;border:1px solid #FADBD8;border-radius:2px;display:inline-block"></span>Ferie</span>
@@ -2470,6 +2589,7 @@ function openEmpModal(id){
           <label class="check-item"><input type="checkbox" id="eProf" ${emp&&emp.isProfumeria?'checked':''}> 🌸 Specializzato Profumeria</label>
           <label class="check-item"><input type="checkbox" id="eOpen" ${emp&&emp.canOpenStore?'checked':''}> 🔑 Abilitato Apertura</label>
           <label class="check-item"><input type="checkbox" id="eCamion" ${emp&&emp.takesMorningDelivery?'checked':''}> 🚚 Prende Camion (7:00)</label>
+          <label class="check-item"><input type="checkbox" id="eClose" ${emp&&emp.canCloseStore?'checked':''}> 🔐 Abilitato Chiusura (codice allarme)</label>
         </div>
         <div class="mt-8">
           <label class="form-label">Altre caratteristiche (separate da virgola)</label>
@@ -2777,6 +2897,7 @@ function saveEmp(existId){
     biweeklyFirstWeek:ht.value==='fixed'&&document.getElementById('eBiweekly').checked?(document.querySelector('input[name="eBwFirst"]:checked')||{value:'A'}).value:'A',
     isDirectore:document.getElementById('eDir').checked,
     isProfumeria:document.getElementById('eProf').checked,
+    canCloseStore:document.getElementById('eClose').checked,
     canOpenStore:document.getElementById('eOpen').checked,
     takesMorningDelivery:document.getElementById('eCamion').checked,
     customChars:cc,
