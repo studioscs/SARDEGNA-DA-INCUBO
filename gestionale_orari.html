@@ -1447,6 +1447,20 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
      già in turno al mattino, infine un qualsiasi dipendente disponibile.
      Se il turno del mattino non c'è, viene creato.                   */
   const camionDi = {};   // dayKey → nome di chi riceve il camion
+  const camionSettimana = {};   // empId → quante volte ha già preso il camion questa settimana
+  // alternanza fra settimane: la memoria è per singolo giorno della settimana
+  // (come per la domenica) — altrimenti, se lo stesso gruppo di persone si
+  // scambia i giorni di camion dentro la stessa settimana, tutti finiscono
+  // con la stessa "ultima settimana" e il lunedì torna sempre alla prima
+  // persona in ordine di elenco. A parità, chi ne ha già preso meno questa
+  // stessa settimana passa avanti, per non caricare sempre la stessa persona
+  // quando i giorni di camion sono più di uno.
+  const ordinaPerAlternanza = (lista, dayKey) => lista.slice().sort((a,b) => {
+    const ua = restHistory['camion_'+dayKey+'_'+a.id] ?? -1, ub = restHistory['camion_'+dayKey+'_'+b.id] ?? -1;
+    if(ua !== ub) return ua - ub;
+    const ca = camionSettimana[a.id]||0, cb = camionSettimana[b.id]||0;
+    return ca - cb;
+  });
   openDays.forEach(dayKey => {
     if(!(S.camionDays && S.camionDays[dayKey])) return;
     const sh = S.storeHours[dayKey];
@@ -1468,11 +1482,14 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
       avail.filter(e => disponibile(e) && !e.isDirectore),
       avail.filter(e => disponibile(e))
     ];
-    const scelto = (gruppi.find(g => g.length) || [])[0];
+    const gruppoScelto = gruppi.find(g => g.length) || [];
+    const scelto = ordinaPerAlternanza(gruppoScelto, dayKey)[0];
     if(!scelto){
       warnings.push(`🚚 ${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}): nessun dipendente disponibile per ricevere il camion alle 07:00.`);
       return;
     }
+    camionSettimana[scelto.id] = (camionSettimana[scelto.id]||0) + 1;
+    restHistory['camion_'+dayKey+'_'+scelto.id] = weekIndex;
 
     const blocchi = (A[scelto.id][dayKey] = A[scelto.id][dayKey] || []).sort((a,b) => a.s - b.s);
     const mattutino = blocchi.find(b => b.s < fineMattina);
