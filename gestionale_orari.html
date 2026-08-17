@@ -1188,11 +1188,7 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
         warnings.push(`${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}): ${emp.name} inserito oltre il limite di ${capienza} persone in contemporanea per non lasciare la giornata senza turno.`);
     });
 
-    // R4: se nessuna esperta copre il giorno, segnalalo
-    const profOggi = avail.some(e => e.isProfumeria &&
-      (fasceDi(e.id,dayKey).length || lavoraFisso(e.id,dayKey)));
-    if(avail.some(e => e.isProfumeria) && !profOggi)
-      warnings.push(`🌸 ${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}): nessuna esperta di profumeria in turno (riposo o assenza).`);
+
   });
 
   /* ═══ 6-7. ORE CONTRATTUALI E TURNI REALI — R7 ══════════════════════
@@ -1307,6 +1303,16 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
         for(const b of A[emp.id][k].slice().sort((x,y) => (y.e-y.s) - (x.e-x.s))){
           if(extra <= 0) break;
           if(b.straordinario) continue;   // ore extra volute per coprire il negozio
+          // non accorciare il turno di un'esperta se è l'unica a coprire quella
+          // fascia: il taglio lascerebbe la profumeria scoperta
+          if(emp.isProfumeria){
+            const critico = fasceDelGiorno(k).some(f => {
+              if(!(b.s <= f.s && b.e >= f.e)) return false;
+              return !avail.some(e2 => e2.id !== emp.id && e2.isProfumeria &&
+                (A[e2.id][k]||[]).some(x => x.s <= f.s && x.e >= f.e));
+            });
+            if(critico) continue;
+          }
           // chi entra col camion alle 07:00 resta comunque fino alle 11:00
           const minimo = b.s <= t2m('07:00') ? Math.max(MIN_FASCIA_H*60, t2m('11:00') - b.s) : MIN_FASCIA_H*60;
           const taglio = Math.min(Math.max(0, (b.e-b.s) - minimo), extra);
@@ -1521,6 +1527,84 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
   });
 
   tagliaEccedenza();   // rilivella dopo gli spostamenti di chiusura
+
+  /* ═══ 11. PROFUMERIA SU TUTTO L'ORARIO — R4 ════════════════════════
+     Un'esperta di profumeria deve essere presente in ogni momento di
+     apertura. La fase gira per ultima, dopo il livellamento delle ore,
+     e lavora sui BUCHI di copertura: per ciascuno allunga il turno di
+     un'esperta adiacente oppure ne inserisce un'altra, anche in
+     staffetta quando la fascia supera le 6 ore consecutive.         */
+  const esperte = avail.filter(e => e.isProfumeria);
+  if(esperte.length){
+    openDays.forEach(dayKey => {
+      fasceDelGiorno(dayKey).forEach(f => {
+        // buchi non coperti da esperte dentro la fascia
+        const buchi = () => {
+          const cop = [];
+          esperte.forEach(e => (A[e.id][dayKey]||[]).forEach(b => {
+            const x = Math.max(f.s, b.s), y = Math.min(f.e, b.e);
+            if(y > x) cop.push([x,y]);
+          }));
+          cop.sort((p,q) => p[0]-q[0]);
+          const out = []; let cur = f.s;
+          cop.forEach(([x,y]) => { if(x > cur) out.push([cur,x]); cur = Math.max(cur,y) });
+          if(cur < f.e) out.push([cur, f.e]);
+          return out;
+        };
+        let guardia = 0;
+        while(guardia++ < 8){
+          const lista = buchi();
+          if(!lista.length) break;
+          const [gs, ge] = lista[0];
+          let risolto = false;
+
+          // 1) allunga il turno di un'esperta che confina col buco
+          for(const esperta of esperte){
+            const blocchi = (A[esperta.id][dayKey]||[]).sort((a,b) => a.s - b.s);
+            const vicino = blocchi.find(b => b.e === gs || b.s === ge ||
+                                             (b.s < ge && b.e > gs));
+            if(!vicino) continue;
+            const prima = blocchi.filter(b => b !== vicino && b.e <= vicino.s).pop();
+            const dopo  = blocchi.filter(b => b !== vicino && b.s >= vicino.e)[0];
+            const nuovoS = Math.min(vicino.s, gs);            // solo allargamento
+            const nuovoE = Math.max(vicino.e, ge);
+            if(prima && nuovoS - prima.e < PAUSA_M) continue;
+            if(dopo && dopo.s - nuovoE < PAUSA_M) continue;
+            if(nuovoE - nuovoS > MAX_CONSEC_M) continue;
+            const oltre = empMaxH(esperta) > 0 && (worked[esperta.id]||0) >= empMaxH(esperta) - 0.01;
+            worked[esperta.id] = (worked[esperta.id]||0) + ((nuovoE-nuovoS) - (vicino.e-vicino.s))/60;
+            vicino.s = nuovoS; vicino.e = nuovoE; vicino.profumeria = true;
+            if(oltre) vicino.straordinario = true;
+            risolto = true; break;
+          }
+          if(risolto) continue;
+
+          // 2) inserisci un'altra esperta sul buco (staffetta se serve)
+          const libera = e => dayKey !== riposo[e.id] && !assente(e, dateOf(dayKey))
+            && !(A[e.id][dayKey]||[]).some(b => b.s < ge && b.e > gs);
+          const candidate = esperte.filter(libera)
+            .sort((a,b) => (empMaxH(b) - (worked[b.id]||0)) - (empMaxH(a) - (worked[a.id]||0)));
+          for(const esperta of candidate){
+            const blocchi = (A[esperta.id][dayKey] = A[esperta.id][dayKey] || []).sort((a,b) => a.s - b.s);
+            let ini = gs, fine = Math.min(ge, gs + MAX_CONSEC_M);
+            const prima = blocchi.filter(b => b.e <= gs).pop();
+            const dopo  = blocchi.filter(b => b.s >= ge)[0];
+            if(prima && ini - prima.e < PAUSA_M) ini = prima.e + PAUSA_M;
+            if(dopo && dopo.s - fine < PAUSA_M) fine = dopo.s - PAUSA_M;
+            if(fine - ini < 60 || ini > gs) continue;          // deve partire dall'inizio del buco
+            const oltre = empMaxH(esperta) > 0 && (worked[esperta.id]||0) >= empMaxH(esperta) - 0.01;
+            blocchi.push({s:ini, e:fine, profumeria:true, straordinario: oltre || undefined});
+            worked[esperta.id] = (worked[esperta.id]||0) + (fine-ini)/60;
+            risolto = true; break;
+          }
+          if(!risolto){
+            warnings.push(`🌸 ${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}) ${m2t(gs)}–${m2t(ge)}: nessuna esperta di profumeria disponibile per questa fascia.`);
+            break;
+          }
+        }
+      });
+    });
+  }
 
   /* ═══ 10. AREE ════════════════════════════════════════════════════ */
   const nonMag = S.areas.filter(a => !isMagazzino(a));
@@ -1906,12 +1990,135 @@ function jumpToDay(dayKey){
   },80);
 }
 function switchCheckOrariTab(tab){
-  const h=document.getElementById('coTabHours'),c=document.getElementById('coTabCoverage');
-  const bh=document.getElementById('coBtnHours'),bc=document.getElementById('coBtnCoverage');
-  if(h)h.style.display=tab==='hours'?'':'none';
-  if(c)c.style.display=tab==='coverage'?'':'none';
-  if(bh)bh.classList.toggle('active',tab==='hours');
-  if(bc)bc.classList.toggle('active',tab==='coverage');
+  const mappa={rules:['coTabRules','coBtnRules'],hours:['coTabHours','coBtnHours'],coverage:['coTabCoverage','coBtnCoverage']};
+  Object.keys(mappa).forEach(k=>{
+    const [tid,bid]=mappa[k];
+    const t=document.getElementById(tid),b=document.getElementById(bid);
+    if(t)t.style.display=(k===tab)?'':'none';
+    if(b)b.classList.toggle('active',k===tab);
+  });
+}
+
+/* ═══════════════ CONTROLLI SULL'ORARIO (5 REGOLE) ═══════════════
+   Rilegge l'orario così com'è — incluse le modifiche manuali — e
+   verifica una per una le regole richieste. Ritorna un elenco di
+   {titolo, ok, righe[]} pronto da mostrare.                        */
+function eseguiControlli(sch){
+  const ws=new Date(sch.weekStart+'T00:00:00');
+  const openDays=DAYS_KEY.filter(k=>S.storeHours[k]&&S.storeHours[k].open&&sch.days[k]);
+  const dataDi=k=>isoDate(addDays(ws,DAYS_KEY.indexOf(k)));
+  const nome=k=>DAYS_FULL[DAYS_KEY.indexOf(k)];
+  const turniDi=(k,id)=>(sch.days[k].shifts||[]).filter(s=>s.employeeId===id);
+  const oreDi=id=>{let t=0;openDays.concat(DAYS_KEY.filter(k=>!openDays.includes(k)))
+    .forEach(k=>{if(sch.days[k])turniDi(k,id).forEach(s=>t+=s.hours||shiftH(s.startTime,s.endTime))});return t};
+  // fasce di apertura di un giorno
+  const fasceGiorno=k=>{
+    const sh=S.storeHours[k];
+    return sh.type==='split'?[[t2m(sh.ms),t2m(sh.me)],[t2m(sh.as),t2m(sh.ae)]]:[[t2m(sh.ms),t2m(sh.ae)]];
+  };
+  const controlli=[];
+
+  /* 1 — ORE DA CONTRATTO */
+  const sotto=[];
+  S.employees.forEach(emp=>{
+    const contratto=empMaxH(emp);
+    if(contratto<=0)return;                       // orario fisso / direttore
+    if(isOnVacation(emp,sch.weekStart))return;    // ferie tutta la settimana
+    const giorniFerie=openDays.filter(k=>isOnVacationDay(emp,dataDi(k))||(emp.daysOff||[]).includes(dataDi(k))||(emp.permissionDays||[]).includes(dataDi(k))).length;
+    const atteso=giorniFerie>0&&openDays.length>0
+      ? Math.round(contratto*(openDays.length-giorniFerie)/openDays.length*10)/10
+      : contratto;
+    const fatte=Math.round(oreDi(emp.id)*10)/10;
+    if(fatte<atteso-0.05)
+      sotto.push(`<strong>${esc(emp.name)}</strong>: ${fatte}h su ${atteso}h ${giorniFerie?`(contratto ${contratto}h ridotto per ${giorniFerie} giorni di assenza)`:'di contratto'} — <span style="color:#C0392B">mancano ${Math.round((atteso-fatte)*10)/10}h</span>`);
+  });
+  controlli.push({titolo:'1. Ore da contratto completate',ok:!sotto.length,
+    righe:sotto.length?sotto:['Tutti i dipendenti raggiungono le ore previste dal contratto.']});
+
+  /* 2 — STRAORDINARI */
+  const extra=[];
+  S.employees.forEach(emp=>{
+    const contratto=empMaxH(emp);
+    if(contratto<=0||isOnVacation(emp,sch.weekStart))return;
+    const fatte=Math.round(oreDi(emp.id)*10)/10;
+    if(fatte>contratto+0.05){
+      let perCopertura=0;
+      openDays.forEach(k=>turniDi(k,emp.id).forEach(s=>{if(s.coperturaExtra)perCopertura+=s.hours||0}));
+      perCopertura=Math.round(perCopertura*10)/10;
+      extra.push(`<strong>${esc(emp.name)}</strong>: <span style="color:#C0392B">+${Math.round((fatte-contratto)*10)/10}h</span> oltre le ${contratto}h di contratto${perCopertura>0?` (di cui ${perCopertura}h per coprire il negozio)`:''}`);
+    }
+  });
+  controlli.push({titolo:'2. Straordinari',ok:true,neutro:!extra.length,
+    righe:extra.length?extra:['Nessuno straordinario questa settimana.']});
+
+  /* 3 — CAMION */
+  const camion=[];
+  let giorniCamion=0;
+  openDays.forEach(k=>{
+    if(!(S.camionDays&&S.camionDays[k]))return;
+    const sh=S.storeHours[k];
+    if(t2m(sh.ms)<=t2m('07:00'))return;           // il negozio apre già alle 07:00
+    giorniCamion++;
+    const chi=(sch.days[k].shifts||[]).filter(s=>t2m(s.startTime)<=t2m('07:00'));
+    if(!chi.length) camion.push(`<strong>${nome(k)}</strong>: <span style="color:#C0392B">nessuno in turno alle 07:00</span>`);
+    else camion.push(`<strong>${nome(k)}</strong>: ${chi.map(s=>{const e=getEmp(s.employeeId);return (e?esc(e.name):'?')+' '+s.startTime+'–'+s.endTime}).join(', ')} ✓`);
+  });
+  controlli.push({titolo:'3. Copertura camion (dalle 07:00)',
+    ok:!camion.some(r=>r.includes('nessuno')),
+    neutro:!giorniCamion,
+    righe:giorniCamion?camion:['Nessun giorno con arrivo camion segnalato.']});
+
+  /* 4 — PROFUMERIA SU TUTTO L'ORARIO */
+  const buchiProf=[];
+  const esperte=S.employees.filter(e=>e.isProfumeria);
+  if(esperte.length){
+    openDays.forEach(k=>{
+      fasceGiorno(k).forEach(([a,b])=>{
+        // minuti scoperti da esperte dentro la fascia
+        const coperture=[];
+        esperte.forEach(e=>turniDi(k,e.id).forEach(s=>{
+          const x=Math.max(a,t2m(s.startTime)), y=Math.min(b,t2m(s.endTime));
+          if(y>x)coperture.push([x,y]);
+        }));
+        coperture.sort((p,q)=>p[0]-q[0]);
+        let cursore=a;
+        coperture.forEach(([x,y])=>{
+          if(x>cursore)buchiProf.push(`<strong>${nome(k)}</strong> ${m2t(cursore)}–${m2t(x)} <span style="color:#C0392B">senza esperta di profumeria</span>`);
+          cursore=Math.max(cursore,y);
+        });
+        if(cursore<b)buchiProf.push(`<strong>${nome(k)}</strong> ${m2t(cursore)}–${m2t(b)} <span style="color:#C0392B">senza esperta di profumeria</span>`);
+      });
+    });
+  }
+  controlli.push({titolo:'4. Profumeria coperta per tutto l\'orario',
+    ok:!buchiProf.length, neutro:!esperte.length,
+    righe:!esperte.length?['Nessun dipendente è segnato come esperto di profumeria.']
+      :(buchiProf.length?buchiProf:['Un\'esperta di profumeria è presente in ogni fascia di apertura, tutti i giorni.'])});
+
+  /* 5 — CHIUSURA */
+  const chiusure=[];
+  const abilitati=S.employees.filter(e=>e.canCloseStore);
+  if(abilitati.length){
+    openDays.forEach(k=>{
+      const sh=S.storeHours[k];
+      const fine=t2m(sh.ae), da=fine-120;
+      const chi=(sch.days[k].shifts||[]).filter(s=>{
+        const e=getEmp(s.employeeId);
+        return e&&e.canCloseStore&&t2m(s.startTime)<=da&&t2m(s.endTime)>=fine;
+      });
+      if(chi.length){
+        const e=getEmp(chi[0].employeeId);
+        chiusure.push(`<strong>${nome(k)}</strong> ${m2t(da)}–${m2t(fine)}: ${esc(e.name)} ✓`);
+      } else {
+        chiusure.push(`<strong>${nome(k)}</strong> ${m2t(da)}–${m2t(fine)}: <span style="color:#C0392B">nessun addetto abilitato alla chiusura</span>`);
+      }
+    });
+  }
+  controlli.push({titolo:'5. Chiusura presidiata (ultime 2 ore)',
+    ok:!chiusure.some(r=>r.includes('nessun addetto')), neutro:!abilitati.length,
+    righe:abilitati.length?chiusure:['Nessun dipendente è segnato come abilitato alla chiusura.']});
+
+  return controlli;
 }
 
 function openCheckOrari(){
@@ -2026,15 +2233,38 @@ function openCheckOrari(){
     </div>`;
   }).join('');
 
+  // ── PROSPETTO 0: I 5 CONTROLLI SULLE REGOLE ──
+  const controlli=eseguiControlli(sch);
+  const kos=controlli.filter(c=>!c.ok).length;
+  const controlliHtml=controlli.map(c=>{
+    const stato=c.ok?(c.neutro?'#5D6D7E':'#1E8449'):'#C0392B';
+    const icona=c.ok?(c.neutro?'—':'✓'):'✕';
+    const sfondo=c.ok?(c.neutro?'#F4F6F7':'#EAFAF1'):'#FDEDEC';
+    const bordo =c.ok?(c.neutro?'#D5DBDB':'#A9DFBF'):'#F5B7B1';
+    return `<div style="border:1px solid ${bordo};background:${sfondo};border-radius:8px;padding:10px 12px;margin-bottom:10px">
+      <div style="font-weight:700;font-size:13px;color:${stato};margin-bottom:6px">${icona} ${c.titolo}</div>
+      <ul style="margin:0;padding-left:18px;line-height:1.7;font-size:12px">${c.righe.map(r=>`<li>${r}</li>`).join('')}</ul>
+    </div>`;
+  }).join('');
+
   openModal(`
     <div class="modal-header"><div class="modal-title">📊 Check Orari — Sett. ${idx+1} (${weekRange(sch.weekStart)})</div><button class="modal-close" onclick="closeModal()">×</button></div>
     <div class="modal-body">
-      <div style="display:flex;gap:8px;margin-bottom:14px">
-        <button class="co-tab-btn active" id="coBtnHours" onclick="switchCheckOrariTab('hours')">👥 Ore Dipendenti</button>
+      <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+        <button class="co-tab-btn active" id="coBtnRules" onclick="switchCheckOrariTab('rules')">✅ Controlli${kos?` <span style="background:#E74C3C;color:#fff;border-radius:8px;padding:0 6px;font-size:10px;margin-left:2px">${kos}</span>`:''}</button>
+        <button class="co-tab-btn" id="coBtnHours" onclick="switchCheckOrariTab('hours')">👥 Ore Dipendenti</button>
         <button class="co-tab-btn" id="coBtnCoverage" onclick="switchCheckOrariTab('coverage')">🗺️ Copertura Aree${flatGaps.length?` <span style="background:#E74C3C;color:#fff;border-radius:8px;padding:0 6px;font-size:10px;margin-left:2px">${flatGaps.length}</span>`:''}</button>
       </div>
 
-      <div id="coTabHours">
+      <div id="coTabRules">
+        <div class="alert ${kos?'alert-warning':'alert-success'}" style="margin-bottom:14px">
+          ${kos?`<strong>⚠️ ${kos} controllo/i non superato/i.</strong> I dettagli qui sotto; l'orario resta modificabile a mano dalla tabella.`
+                :'<strong>✓ Tutti i controlli superati.</strong> Verifica eseguita sull\'orario attuale, modifiche manuali incluse.'}
+        </div>
+        ${controlliHtml}
+      </div>
+
+      <div id="coTabHours" style="display:none">
         <div class="alert alert-info" style="margin-bottom:14px">Calcolo basato sull'orario attuale, incluse le modifiche manuali. Le ore sono la somma effettiva dei turni assegnati questa settimana.</div>
         <div style="display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap">
           <div style="flex:1;min-width:120px;background:#F4F6F7;border-radius:6px;padding:10px;text-align:center">
