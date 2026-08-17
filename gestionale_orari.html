@@ -1726,27 +1726,84 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
           const [gs, ge] = lista[0];
           let risolto = false;
 
-          // 1) allunga il turno di un'esperta che confina col buco
+          /* 1) allunga il turno di un'esperta fino a coprire il buco.
+             Si raccolgono TUTTE le soluzioni possibili (di ogni esperta, su
+             ogni suo turno del giorno) e si sceglie la più economica: quella
+             che aggiunge meno ore e che non deve spostare altri turni. Così
+             non si consumano ore che servirebbero negli altri giorni.     */
+          const piani = [];
           for(const esperta of esperte){
             const blocchi = (A[esperta.id][dayKey]||[]).sort((a,b) => a.s - b.s);
-            const vicino = blocchi.find(b => b.e === gs || b.s === ge ||
-                                             (b.s < ge && b.e > gs));
-            if(!vicino) continue;
-            const prima = blocchi.filter(b => b !== vicino && b.e <= vicino.s).pop();
-            const dopo  = blocchi.filter(b => b !== vicino && b.s >= vicino.e)[0];
-            const nuovoS = Math.min(vicino.s, gs);            // solo allargamento
-            const nuovoE = Math.max(vicino.e, ge);
-            if(prima && nuovoS - prima.e < PAUSA_M) continue;
-            if(dopo && dopo.s - nuovoE < PAUSA_M) continue;
-            if(nuovoE - nuovoS > MAX_CONSEC_M) continue;
-            if(!entroTetto(esperta, ((nuovoE-nuovoS) - (vicino.e-vicino.s))/60)) continue;
-            const oltre = empMaxH(esperta) > 0 && (worked[esperta.id]||0) >= empMaxH(esperta) - 0.01;
-            worked[esperta.id] = (worked[esperta.id]||0) + ((nuovoE-nuovoS) - (vicino.e-vicino.s))/60;
-            vicino.s = nuovoS; vicino.e = nuovoE; vicino.profumeria = true;
-            if(oltre) vicino.straordinario = true;
-            risolto = true; break;
+            for(const vicino of blocchi){
+              if(Math.max(vicino.e, ge) - Math.min(vicino.s, gs) > MAX_CONSEC_M) continue;
+              const prima = blocchi.filter(b => b !== vicino && b.e <= vicino.s).pop();
+              const dopo  = blocchi.filter(b => b !== vicino && b.s >= vicino.e)[0];
+              const nuovoS = Math.min(vicino.s, gs);            // solo allargamento
+              const nuovoE = Math.max(vicino.e, ge);
+              if(prima && nuovoS - prima.e < PAUSA_M) continue;
+              if(nuovoE - nuovoS > MAX_CONSEC_M) continue;
+              // Il turno successivo della stessa persona può impedire la pausa di
+              // 2 ore: in quel caso lo si sposta più tardi dentro la sua fascia
+              // (mai i turni vincolati: camion, apertura, chiusura, orario fisso).
+              const altri = blocchi.filter(b => b !== vicino && b !== dopo)
+                .reduce((t,b) => t + (b.e-b.s), 0);
+              let spostato = null;
+              if(dopo && dopo.s - nuovoE < PAUSA_M){
+                if(dopo.camion || dopo.apertura || dopo.chiusura || esperta.hoursType === 'fixed') continue;
+                // se quel turno sta presidiando la chiusura, non si tocca
+                const fineNeg = t2m(S.storeHours[dayKey].ae);
+                if(esperta.canCloseStore && dopo.e >= fineNeg && dopo.s <= fineNeg - ORE_CHIUSURA_M) continue;
+                if(blocchi.some(b => b !== dopo && b.s >= dopo.e)) continue;   // solo se è l'ultimo
+                const f2 = fasceDelGiorno(dayKey).find(g => dopo.s >= g.s && dopo.e <= g.e);
+                if(!f2) continue;
+                // durata massima concessa dal tetto giornaliero dopo l'allungamento
+                const spazio = MAX_GIORNO_M - altri - (nuovoE - nuovoS);
+                const ns = nuovoE + PAUSA_M;
+                const ne = Math.min(f2.e, ns + (dopo.e - dopo.s), ns + Math.max(0, spazio));
+                if(ne - ns < MIN_FASCIA_H*60) continue;
+                spostato = {s:ns, e:ne};
+              }
+              const durataAltri = altri
+                + (dopo ? (spostato ? spostato.e - spostato.s : dopo.e - dopo.s) : 0);
+              // il tetto giornaliero si applica solo quando si sposta un altro
+              // turno: allungare per coprire la profumeria resta prioritario
+              if(spostato && durataAltri + (nuovoE - nuovoS) > MAX_GIORNO_M) continue;
+              const delta = ((nuovoE-nuovoS) - (vicino.e-vicino.s)
+                             + (spostato ? (spostato.e-spostato.s) - (dopo.e-dopo.s) : 0))/60;
+              if(!entroTetto(esperta, delta)) continue;
+              piani.push({esperta, vicino, dopo, spostato, nuovoS, nuovoE, delta,
+                          costo: delta*60 + (spostato ? 1000 : 0)});
+            }
           }
-          if(risolto) continue;
+          if(piani.length){
+            // la chiusura non si tocca: se spostare un turno la lascia scoperta
+            // il piano viene annullato e si passa al successivo.
+            const chiusuraOk = () => {
+              if(!abilitatiChiusura.length) return true;
+              const shD = S.storeHours[dayKey];
+              const fine = t2m(shD.ae), da = fine - ORE_CHIUSURA_M;
+              return abilitatiChiusura.some(e => (A[e.id][dayKey]||[]).some(b => b.s <= da && b.e >= fine));
+            };
+            const eraOk = chiusuraOk();
+            let fatto = false;
+            for(const p of piani.sort((a,b) => a.costo - b.costo)){
+              const bkV = {s:p.vicino.s, e:p.vicino.e};
+              const bkD = p.dopo ? {s:p.dopo.s, e:p.dopo.e} : null;
+              p.vicino.s = p.nuovoS; p.vicino.e = p.nuovoE;
+              if(p.spostato){ p.dopo.s = p.spostato.s; p.dopo.e = p.spostato.e }
+              if(eraOk && !chiusuraOk()){
+                p.vicino.s = bkV.s; p.vicino.e = bkV.e;
+                if(bkD){ p.dopo.s = bkD.s; p.dopo.e = bkD.e }
+                continue;
+              }
+              const oltre = empMaxH(p.esperta) > 0 && (worked[p.esperta.id]||0) >= empMaxH(p.esperta) - 0.01;
+              worked[p.esperta.id] = (worked[p.esperta.id]||0) + p.delta;
+              p.vicino.profumeria = true;
+              if(oltre) p.vicino.straordinario = true;
+              fatto = true; break;
+            }
+            if(fatto) continue;
+          }
 
           // 2) inserisci un'altra esperta sul buco (staffetta se serve)
           const libera = e => dayKey !== riposo[e.id] && !assente(e, dateOf(dayKey))
@@ -1767,10 +1824,9 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
             worked[esperta.id] = (worked[esperta.id]||0) + (fine-ini)/60;
             risolto = true; break;
           }
-          if(!risolto){
-            warnings.push(`🌸 ${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}) ${m2t(gs)}–${m2t(ge)}: nessuna esperta di profumeria disponibile per questa fascia.`);
-            break;
-          }
+          // niente avviso qui: le fasi successive possono ancora coprire il
+          // buco. Il controllo definitivo è in fondo, sui turni scritti.
+          if(!risolto) break;
         }
       });
     });
@@ -1974,6 +2030,13 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
             }
             if(inizio2 + durata2 <= limiteFine){ b.s = inizio2; b.e = inizio2 + durata2; out.push(b); return }
             if(limiteFine - inizio2 >= MIN_FASCIA_H*60){ b.s = inizio2; b.e = limiteFine; out.push(b); return }
+            // Ultima possibilità prima di perdere il turno: se è vincolato
+            // (chiusura, camion, apertura) resta dov'è e ad accorciarsi è la
+            // catena che lo precede — la copertura obbligatoria non si perde mai.
+            if(b.chiusura || b.camion || b.apertura){
+              const nuovaFine = b.s - PAUSA_M;
+              if(nuovaFine - prec.s >= MIN_FASCIA_H*60){ prec.e = nuovaFine; out.push(b); return }
+            }
             out[out.length-1] = {s:prec.s, e:Math.min(prec.s + MAX_CONSEC_M, unito.e)};
             return;
           }
@@ -2122,6 +2185,7 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
   });
 
   riordinaTurni();   // ultimo assestamento dopo le coperture
+  coprireProfumeria();   // ultima parola alla regola numero uno: profumeria coperta
 
   /* ═══ 10. AREE ════════════════════════════════════════════════════ */
   const nonMag = S.areas.filter(a => !isMagazzino(a));
@@ -2131,22 +2195,66 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
   if(!S.areas.length)
     warnings.push('⚠️ Nessuna area configurata — i turni non hanno area assegnata.');
 
+  const cEsperte = avail.filter(e => e.isProfumeria).length;
   openDays.forEach(dayKey => {
     // tutti i turni del giorno, in ordine di inizio
     const turni = [];
     avail.forEach(e => (A[e.id][dayKey]||[]).forEach(b => turni.push({emp:e, b})));
     turni.sort((x,y) => x.b.s - y.b.s);
     const conteggio = {}; S.areas.forEach(a => conteggio[a.id] = []);
+    // i turni con area già decisa (orari fissi) contano subito per la capienza
+    turni.forEach(({b}) => { if(b.areaId && conteggio[b.areaId]) conteggio[b.areaId].push(b) });
+    const sovrappostiA = (a, b) => (conteggio[a.id]||[])
+      .filter(x => x !== b && x.s < b.e && x.e > b.s).length;
+    const capienteA = (a, b) => sovrappostiA(a, b) < (a.maxConcurrent || 99);
+
+    /* ── passo 1: la profumeria per prima ──────────────────────────────
+       Si scorre l'orario di apertura e, in ogni istante scoperto, si mette
+       in profumeria un'ESPERTA fra quelle presenti, scegliendo il turno che
+       porta la copertura più avanti. Solo se in quel momento non c'è nessuna
+       esperta libera si ripiega su un'altra persona (caso già segnalato
+       dalla fase 11 con l'avviso 🌸).                                   */
+    if(areaProf){
+      // due passaggi: prima SOLO le esperte su tutta la giornata, poi — sui
+      // buchi rimasti — chiunque altro, così una non esperta non occupa mai
+      // il posto che un'esperta avrebbe potuto tenere più tardi.
+      const sovrapMin = b => (conteggio[areaProf.id]||[])
+        .reduce((t,x) => t + Math.max(0, Math.min(x.e,b.e) - Math.max(x.s,b.s)), 0);
+      [true, false].forEach(soloEsperte => {
+        if(soloEsperte && !cEsperte) return;
+        fasceDelGiorno(dayKey).forEach(f => {
+          let cur = f.s, giro = 0;
+          while(cur < f.e && giro++ < 200){
+            const presenti = conteggio[areaProf.id].filter(x => x.s <= cur && x.e > cur);
+            if(presenti.length){ cur = Math.min(...presenti.map(x => x.e)); continue }
+            const cand = turni.filter(({emp,b}) => !b.areaId && b.s <= cur && b.e > cur &&
+                                                   (!soloEsperte || emp.isProfumeria));
+            // meglio chi sta dentro il limite di contemporaneità dell'area; se
+            // nessuno lo rispetta si accetta comunque il turno che si sovrappone
+            // di meno, perché avere l'esperta in profumeria viene prima.
+            const capienti = cand.filter(({b}) => capienteA(areaProf, b));
+            const scelta = (capienti.length ? capienti : cand)
+              .sort((x,y) => (sovrapMin(x.b) - sovrapMin(y.b)) || (y.b.e - x.b.e))[0];
+            if(!scelta){ cur += PASSO_M; continue }
+            scelta.b.areaId = areaProf.id;
+            conteggio[areaProf.id].push(scelta.b);
+            cur = scelta.b.e;
+          }
+        });
+      });
+    }
+
+    /* ── passo 2: tutte le altre aree ─────────────────────────────────── */
     turni.forEach(({emp, b}) => {
-      if(b.areaId) return;                                // orario fisso: area già scelta
-      const sovrapposti = a => (conteggio[a.id]||[])
-        .filter(x => x.s < b.e && x.e > b.s).length;
-      const capiente = a => sovrapposti(a) < (a.maxConcurrent || 99);
+      if(b.areaId) return;                                // già assegnata
+      // in profumeria non entra chi non è esperto finché c'è personale esperto
+      const ammessa = a => a !== areaProf || emp.isProfumeria || cEsperte === 0;
+      const libere = ordinate.filter(a => ammessa(a));
       let scelta = null;
-      if(emp.isProfumeria && areaProf && capiente(areaProf)) scelta = areaProf;
-      if(!scelta) scelta = ordinate.find(a => sovrapposti(a) === 0 && capiente(a));
-      if(!scelta) scelta = ordinate.find(a => capiente(a));
-      if(!scelta) scelta = S.areas[0];
+      if(emp.isProfumeria && areaProf && capienteA(areaProf, b)) scelta = areaProf;
+      if(!scelta) scelta = libere.find(a => sovrappostiA(a, b) === 0 && capienteA(a, b));
+      if(!scelta) scelta = libere.find(a => capienteA(a, b));
+      if(!scelta) scelta = libere[0] || S.areas[0];
       if(scelta){ b.areaId = scelta.id; (conteggio[scelta.id]=conteggio[scelta.id]||[]).push(b) }
     });
   });
@@ -2292,6 +2400,36 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
         return e && e.canCloseStore && t2m(x.startTime) <= da && t2m(x.endTime) >= chiusura;
       });
       if(!ok) warnings.push(`🔐 ${nomeGiorno(k)} (${weekRange(weekStartISO)}): le ultime 2 ore (${m2t(da)}–${m2t(chiusura)}) NON sono coperte da una persona abilitata alla chiusura.`);
+    });
+  }
+
+  // controllo finale: profumeria presidiata da un'esperta per tutto l'orario
+  if(S.employees.some(e => e.isProfumeria)){
+    const areaP = S.areas.find(isProfArea);
+    openDays.forEach(k => {
+      const dentro = m => sch.days[k].shifts.filter(x => t2m(x.startTime) <= m && t2m(x.endTime) > m);
+      fasceDelGiorno(k).forEach(f => {
+        let vuoto = null, fuoriArea = null;
+        const chiudi = (run, m, msg) => { if(run !== null) warnings.push(msg(run, m)) };
+        for(let m = f.s; m < f.e; m += 15){
+          const esperte = dentro(m).filter(x => { const e = getEmp(x.employeeId); return e && e.isProfumeria });
+          const inArea  = areaP ? esperte.some(x => x.areaId === areaP.id) : esperte.length > 0;
+          if(!esperte.length){
+            if(vuoto === null) vuoto = m;
+          } else {
+            chiudi(vuoto, m, (a,b) => `🌸 ${nomeGiorno(k)} (${weekRange(weekStartISO)}) ${m2t(a)}–${m2t(b)}: nessuna esperta di profumeria in negozio.`);
+            vuoto = null;
+          }
+          if(esperte.length && !inArea){
+            if(fuoriArea === null) fuoriArea = m;
+          } else {
+            chiudi(fuoriArea, m, (a,b) => `🌸 ${nomeGiorno(k)} (${weekRange(weekStartISO)}) ${m2t(a)}–${m2t(b)}: l'area profumeria non è assegnata a un'esperta.`);
+            fuoriArea = null;
+          }
+        }
+        chiudi(vuoto, f.e, (a,b) => `🌸 ${nomeGiorno(k)} (${weekRange(weekStartISO)}) ${m2t(a)}–${m2t(b)}: nessuna esperta di profumeria in negozio.`);
+        chiudi(fuoriArea, f.e, (a,b) => `🌸 ${nomeGiorno(k)} (${weekRange(weekStartISO)}) ${m2t(a)}–${m2t(b)}: l'area profumeria non è assegnata a un'esperta.`);
+      });
     });
   }
 
@@ -2682,6 +2820,22 @@ function eseguiControlli(sch){
           cursore=Math.max(cursore,y);
         });
         if(cursore<b)buchiProf.push(`<strong>${nome(k)}</strong> ${m2t(cursore)}–${m2t(b)} <span style="color:var(--clay-text)">senza esperta di profumeria</span>`);
+        // l'area profumeria dev'essere assegnata proprio all'esperta presente
+        const areaP=S.areas.find(isProfArea);
+        if(areaP){
+          let da=null;
+          for(let m=a;m<b;m+=15){
+            const presenti=(sch.days[k].shifts||[]).filter(s=>t2m(s.startTime)<=m&&t2m(s.endTime)>m);
+            const esperteQui=presenti.filter(s=>{const e=getEmp(s.employeeId);return e&&e.isProfumeria});
+            const inArea=esperteQui.some(s=>s.areaId===areaP.id);
+            if(esperteQui.length&&!inArea){ if(da===null)da=m }
+            else if(da!==null){
+              buchiProf.push(`<strong>${nome(k)}</strong> ${m2t(da)}–${m2t(m)} <span style="color:var(--clay-text)">area profumeria non assegnata a un'esperta</span>`);
+              da=null;
+            }
+          }
+          if(da!==null)buchiProf.push(`<strong>${nome(k)}</strong> ${m2t(da)}–${m2t(b)} <span style="color:var(--clay-text)">area profumeria non assegnata a un'esperta</span>`);
+        }
       });
     });
   }
