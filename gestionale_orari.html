@@ -984,6 +984,163 @@ function assente(emp, dateISO){
 
 function isMagazzino(a){ return a.name.toLowerCase().includes('magazzino') }
 function isProfArea(a){ return a.name.toLowerCase().includes('profumeria') }
+function apreNegozio(e){ return !!(e.canOpenStore || e.takesMorningDelivery) }
+function minPersoneRichieste(){
+  const aree = S.areas.filter(a => !isMagazzino(a));
+  return Math.max(1, aree.reduce((t,a) => t + Math.max(1, a.minCoverage||1), 0));
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RISOLUTORE CARENZE — usato dall'interfaccia (tasto "Risolvi") per
+   trovare e applicare rapidamente una soluzione a una fascia scoperta
+   già generata, senza dover rigenerare l'intera settimana.
+   ═══════════════════════════════════════════════════════════════════ */
+function trovaScoperture(sch){
+  if(!sch || !sch.days) return [];
+  const ws = new Date(sch.weekStart+'T00:00:00');
+  const openDays = DAYS_KEY.filter(k => S.storeHours[k] && S.storeHours[k].open && sch.days[k]);
+  const minReq = minPersoneRichieste();
+  const esperte = S.employees.filter(e => e.isProfumeria);
+  const abilitatiChiusura = S.employees.filter(e => e.canCloseStore);
+  const abilitatiApertura = S.employees.filter(apreNegozio);
+  const scoperture = [];
+
+  openDays.forEach(dayKey => {
+    const sh = S.storeHours[dayKey];
+    const fasce = fasceDelGiorno(dayKey);
+    const shifts = sch.days[dayKey].shifts || [];
+    const presentiAt = m => shifts.filter(s => t2m(s.startTime) <= m && t2m(s.endTime) > m);
+    const aggiungiBuchi = (kind, cond) => fasce.forEach(f => {
+      let inizio = null;
+      for(let m = f.s; m < f.e; m += 15){
+        if(cond(m)){ if(inizio === null) inizio = m }
+        else if(inizio !== null){ scoperture.push({kind, dayKey, s:inizio, e:m}); inizio = null }
+      }
+      if(inizio !== null) scoperture.push({kind, dayKey, s:inizio, e:f.e});
+    });
+
+    aggiungiBuchi('minimo', m => presentiAt(m).length < minReq);
+    if(esperte.length) aggiungiBuchi('profumeria', m =>
+      !presentiAt(m).some(s => { const e = getEmp(s.employeeId); return e && e.isProfumeria }));
+
+    if(abilitatiApertura.length){
+      const ini = t2m(sh.ms), fine = Math.min(ini+120, t2m(sh.type==='split'?sh.me:sh.ae));
+      const ok = shifts.some(s => { const e = getEmp(s.employeeId);
+        return e && apreNegozio(e) && t2m(s.startTime) <= ini && t2m(s.endTime) >= fine });
+      if(!ok) scoperture.push({kind:'apertura', dayKey, s:ini, e:fine});
+    }
+    if(abilitatiChiusura.length){
+      const fine = t2m(sh.ae), da = fine - 120;
+      const ok = shifts.some(s => { const e = getEmp(s.employeeId);
+        return e && e.canCloseStore && t2m(s.startTime) <= da && t2m(s.endTime) >= fine });
+      if(!ok) scoperture.push({kind:'chiusura', dayKey, s:da, e:fine});
+    }
+    if(S.camionDays && S.camionDays[dayKey] && t2m(sh.ms) > t2m('07:00')){
+      const ok = shifts.some(s => t2m(s.startTime) <= t2m('07:00'));
+      if(!ok) scoperture.push({kind:'camion', dayKey, s:t2m('07:00'), e:t2m('07:00')+120});
+    }
+  });
+  return scoperture;
+}
+
+const SCOPERTURA_LABEL = {minimo:'copertura minima', profumeria:'profumeria senza esperta',
+  apertura:'apertura non presidiata', chiusura:'chiusura non presidiata', camion:'camion senza copertura alle 07:00'};
+const SCOPERTURA_ICONA = {minimo:'🕳', profumeria:'🌸', apertura:'🔓', chiusura:'🔐', camion:'🚚'};
+
+function calcolaSoluzioni(sch, sc){
+  const ws = new Date(sch.weekStart+'T00:00:00');
+  const dayKey = sc.dayKey;
+  const dayDate = isoDate(addDays(ws, DAYS_KEY.indexOf(dayKey)));
+  const fasce = fasceDelGiorno(dayKey);
+  const fasciaRif = fasce.find(f => sc.s >= f.s && sc.e <= f.e) || fasce[0] || {s:sc.s, e:sc.e};
+  const shiftsGiorno = sch.days[dayKey].shifts || [];
+
+  const assente = emp => (sch.days[dayKey].dayOff||[]).includes(emp.id)
+    || (emp.daysOff||[]).includes(dayDate) || (emp.permissionDays||[]).includes(dayDate)
+    || ((emp.vacations||[]).some(v => dayDate >= v.from && dayDate <= v.to)
+        && !(emp.vacationOverrides||[]).includes(dayDate));
+
+  const oreSettimana = emp => DAYS_KEY.reduce((t,k) => t + (sch.days[k] ?
+    (sch.days[k].shifts||[]).filter(s => s.employeeId === emp.id)
+      .reduce((tt,s) => tt + (s.hours || shiftH(s.startTime, s.endTime)), 0) : 0), 0);
+
+  const idoneo = emp => sc.kind === 'profumeria' ? emp.isProfumeria
+    : sc.kind === 'apertura' ? apreNegozio(emp)
+    : sc.kind === 'chiusura' ? emp.canCloseStore : true;
+
+  const candidati = S.employees.filter(emp => emp.hoursType !== 'fixed' && !emp.isDirectore
+    && idoneo(emp) && !assente(emp));
+
+  const soluzioni = [];
+  candidati.forEach(emp => {
+    const suoi = shiftsGiorno.filter(s => s.employeeId === emp.id)
+      .map(s => ({s:t2m(s.startTime), e:t2m(s.endTime), obj:s})).sort((a,b) => a.s - b.s);
+    if(suoi.some(x => x.s <= sc.s && x.e >= sc.e)) return;      // già presente sul buco
+
+    const vicinoPrima = suoi.find(x => x.e === sc.s);
+    const vicinoDopo  = suoi.find(x => x.s === sc.e);
+    if(vicinoPrima && (sc.e - vicinoPrima.s) <= 360)
+      soluzioni.push({tipo:'estendi', emp, dayKey, gapKind:sc.kind, shiftRef:vicinoPrima.obj,
+        nuovoInizio:vicinoPrima.s, nuovoFine:sc.e,
+        nota:`allunga il turno delle ${vicinoPrima.obj.startTime}–${vicinoPrima.obj.endTime}`});
+    if(vicinoDopo && (vicinoDopo.e - sc.s) <= 360)
+      soluzioni.push({tipo:'estendi', emp, dayKey, gapKind:sc.kind, shiftRef:vicinoDopo.obj,
+        nuovoInizio:sc.s, nuovoFine:vicinoDopo.e,
+        nota:`anticipa il turno delle ${vicinoDopo.obj.startTime}–${vicinoDopo.obj.endTime}`});
+
+    if(!suoi.some(x => x.s < sc.e && sc.s < x.e)){
+      let ini = sc.s, fine = sc.e;
+      const prima = suoi.filter(x => x.e <= ini).pop();
+      const dopo  = suoi.filter(x => x.s >= fine)[0];
+      if(prima && ini - prima.e < 120) return;
+      if(dopo && dopo.s - fine < 120) return;
+      if(fine - ini < 120) fine = Math.min(fasciaRif.e, ini + 120);
+      if(fine - ini < 120) return;
+      const target = empMaxH(emp);
+      const overtime = target > 0 && (oreSettimana(emp) + (fine-ini)/60) > target + 0.01;
+      soluzioni.push({tipo:'nuovo', emp, dayKey, gapKind:sc.kind, nuovoInizio:ini, nuovoFine:fine, overtime, nota:'nuovo turno'});
+    }
+  });
+
+  soluzioni.sort((a,b) => (a.tipo==='estendi'?0:1) - (b.tipo==='estendi'?0:1)
+    || (a.overtime?1:0) - (b.overtime?1:0));
+  return soluzioni.slice(0,5);
+}
+
+function sceltaAreaPerGap(sch, sc){
+  if(sc.kind === 'profumeria'){ const a = S.areas.find(isProfArea); if(a) return a.id }
+  const shiftsGiorno = sch.days[sc.dayKey].shifts || [];
+  const conteggio = {}; S.areas.forEach(a => conteggio[a.id] = 0);
+  shiftsGiorno.forEach(s => { if(s.areaId && t2m(s.startTime) < sc.e && sc.s < t2m(s.endTime)) conteggio[s.areaId]++ });
+  const ordinate = S.areas.filter(a => !isProfArea(a)).sort((a,b) => (conteggio[a.id]||0) - (conteggio[b.id]||0));
+  return (ordinate[0] || S.areas[0] || {}).id || '';
+}
+
+function applicaSoluzione(weekIdx, sol){
+  const sch = S.weekSchedules[weekIdx];
+  if(!sch) return;
+  if(sol.tipo === 'estendi'){
+    sol.shiftRef.startTime = m2t(sol.nuovoInizio);
+    sol.shiftRef.endTime = m2t(sol.nuovoFine);
+    sol.shiftRef.hours = shiftH(sol.shiftRef.startTime, sol.shiftRef.endTime);
+    if(sol.gapKind === 'profumeria'){ const a = S.areas.find(isProfArea); if(a) sol.shiftRef.areaId = a.id }
+    if(sol.gapKind === 'apertura') sol.shiftRef.apertura = true;
+    if(sol.gapKind === 'chiusura') sol.shiftRef.chiusura = true;
+    if(sol.gapKind === 'camion') sol.shiftRef.camion = true;
+  } else {
+    const nuovo = {employeeId: sol.emp.id, startTime: m2t(sol.nuovoInizio), endTime: m2t(sol.nuovoFine),
+      areaId: sceltaAreaPerGap(sch, {dayKey:sol.dayKey, s:sol.nuovoInizio, e:sol.nuovoFine, kind:sol.gapKind}),
+      hours: shiftH(m2t(sol.nuovoInizio), m2t(sol.nuovoFine)), overtime: sol.overtime || undefined};
+    if(sol.gapKind === 'apertura') nuovo.apertura = true;
+    if(sol.gapKind === 'chiusura') nuovo.chiusura = true;
+    if(sol.gapKind === 'camion') nuovo.camion = true;
+    sch.days[sol.dayKey].shifts.push(nuovo);
+    const dayOff = sch.days[sol.dayKey].dayOff || [];
+    sch.days[sol.dayKey].dayOff = dayOff.filter(id => id !== sol.emp.id);
+  }
+  save(); renderSchedule();
+  toast(`Copertura risolta: ${esc(sol.emp.name)} — ${DAYS_FULL[DAYS_KEY.indexOf(sol.dayKey)]}`);
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    generateWeekSchedule — genera l'orario di UNA settimana
@@ -3323,6 +3480,21 @@ function renderSchedule(){
   if(diagn.length&&!isReadOnly){
     html+=`<div class="alert alert-warning" style="margin-bottom:12px"><strong>⚠️ Regole non rispettate (${diagn.length}):</strong><ul style="margin-top:6px;padding-left:18px;line-height:1.8">${diagn.map(d=>`<li>${d}</li>`).join('')}</ul></div>`;
   }
+
+  // ── CARENZE DI COPERTURA — con tasto per risolverle rapidamente ──
+  window._scopertureAttuali=isReadOnly?[]:trovaScoperture(sch);
+  if(window._scopertureAttuali.length){
+    html+=`<div class="alert alert-warning" style="margin-bottom:12px">
+      <strong>🔧 Carenze di copertura da risolvere (${window._scopertureAttuali.length}):</strong>
+      <div style="margin-top:8px;display:flex;flex-direction:column;gap:6px">
+        ${window._scopertureAttuali.map((sc,i)=>`
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+            <span>${SCOPERTURA_ICONA[sc.kind]} <strong>${DAYS_FULL[DAYS_KEY.indexOf(sc.dayKey)]}</strong> ${m2t(sc.s)}–${m2t(sc.e)} — ${SCOPERTURA_LABEL[sc.kind]}</span>
+            <button class="btn btn-sm btn-secondary" onclick="apriRisolutore(${idx},${i})">🔧 Risolvi ▸</button>
+          </div>`).join('')}
+      </div>
+    </div>`;
+  }
   html+=`<div class="sch-grid"><table class="sch-table"><thead><tr><th class="emp-col">Dipendente</th>`;
 
   // confine mattina/pomeriggio di ogni giorno, per la linea verticale nelle celle
@@ -4257,6 +4429,36 @@ function openModal(html,large){
   setTimeout(()=>{const f=box.querySelector('input[type=text],input[type=number]');if(f)f.focus()},60);
 }
 function closeModal(){document.getElementById('modalOverlay').style.display='none';document.getElementById('modalBox').innerHTML=''}
+
+/* ═══ RISOLUTORE CARENZE — tasto "Risolvi" sull'orario settimanale ══ */
+let _soluzioniAttuali=[];
+function apriRisolutore(weekIdx,gapIdx){
+  const sch=S.weekSchedules[weekIdx];
+  const sc=(window._scopertureAttuali||[])[gapIdx];
+  if(!sch||!sc)return;
+  _soluzioniAttuali=calcolaSoluzioni(sch,sc).map(sol=>Object.assign(sol,{weekIdx}));
+  const titolo=`${SCOPERTURA_ICONA[sc.kind]} ${DAYS_FULL[DAYS_KEY.indexOf(sc.dayKey)]} ${m2t(sc.s)}–${m2t(sc.e)} — ${SCOPERTURA_LABEL[sc.kind]}`;
+  const righe=_soluzioniAttuali.map((sol,i)=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px;border:1px solid var(--border);border-radius:6px;margin-bottom:8px">
+      <div>
+        <div style="font-weight:700">${esc(sol.emp.name)} — ${m2t(sol.nuovoInizio)}–${m2t(sol.nuovoFine)}</div>
+        <div style="font-size:11px;color:var(--muted)">${sol.tipo==='estendi'?sol.nota:'Nuovo turno'}${sol.overtime?' · <span style="color:var(--clay-text)">📌 straordinario</span>':''}</div>
+      </div>
+      <button class="btn btn-sm btn-primary" onclick="sceglisoluzione(${i})">Applica ✓</button>
+    </div>`).join('');
+  openModal(`
+    <div class="modal-header"><div class="modal-title">🔧 Risolvi carenza</div><button class="modal-close" onclick="closeModal()">×</button></div>
+    <div class="modal-body">
+      <div style="margin-bottom:12px;font-size:13px;color:var(--muted)">${titolo}</div>
+      ${righe||'<div class="empty-sub">Nessuna soluzione automatica disponibile: nessun dipendente idoneo, senza riposo/assenza, riesce a coprire questa fascia senza violare le altre regole. Modifica manualmente cliccando sulla cella.</div>'}
+    </div>`);
+}
+function sceglisoluzione(i){
+  const sol=_soluzioniAttuali[i];
+  if(!sol)return;
+  applicaSoluzione(sol.weekIdx,sol);
+  closeModal();
+}
 function handleOvClick(e){if(e.target===document.getElementById('modalOverlay'))closeModal()}
 let _confirmCb=null;
 function confirm2(title,sub,cb){
