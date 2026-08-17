@@ -355,6 +355,7 @@ textarea.form-control{resize:vertical;min-height:64px}
           <li>Chi riceve il camion entra alle <strong>07:00</strong> e resta almeno fino alle 11:00</li>
           <li><strong>Chiusura</strong>: le ultime 2 ore prima della chiusura sono sempre coperte da almeno una persona <strong>abilitata alla chiusura</strong> (spunta 🔐 nella scheda dipendente, chi ha il codice dell'allarme)</li>
           <li><strong>Carenza di personale</strong>: se i dipendenti disponibili non bastano a coprire una fascia, vengono aggiunte <strong>ore fuori contratto (straordinari)</strong> pur di non lasciare il negozio scoperto — i turni extra sono evidenziati in rosso con il badge 📌 STRAORDINARIO ed elencati negli avvisi</li>
+          <li><strong>Straordinari ridotti al minimo</strong>: a fine generazione le ore oltre contratto che non servono a nessuna regola vengono eliminate. L'ottimizzazione non sacrifica mai le regole precedenti: ogni riduzione viene applicata solo se la giornata resta conforme</li>
           <li><strong>Ore da contratto completate ogni settimana</strong>: nessuno chiude la settimana sotto il proprio monte ore. Se lo spazio non basta, i turni vengono <strong>sovrapposti</strong> superando il limite di persone in contemporanea — le sovrapposizioni sono marcate 👥 nell'orario ed elencate negli avvisi</li>
           <li>Ferie, permessi e assenze rispettati automaticamente</li>
           <li>Il direttore copre le fasce scoperte (max 3h al giorno, mai di domenica)</li>
@@ -1455,11 +1456,13 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
         const disponibile = e => dayKey !== riposo[e.id] && !assente(e, dateOf(dayKey))
           && !(A[e.id][dayKey]||[]).some(b => b.s < f.e && b.e > f.s);
         const candidati = avail.filter(disponibile).sort((a,b) => {
-          // prima chi ha meno straordinari, poi chi è già in turno quel giorno
-          const sa = Math.max(0, (worked[a.id]||0)) - empMaxH(a);
-          const sb = Math.max(0, (worked[b.id]||0)) - empMaxH(b);
-          const oa = (overtimeH[a.id]||0) + (sa > 0 ? sa : 0);
-          const ob = (overtimeH[b.id]||0) + (sb > 0 ? sb : 0);
+          // 1) chi ha ancora ore di contratto da fare (non genera straordinario)
+          const ra = empMaxH(a) > 0 ? empMaxH(a) - (worked[a.id]||0) : 0;
+          const rb = empMaxH(b) > 0 ? empMaxH(b) - (worked[b.id]||0) : 0;
+          if((ra > 0.01) !== (rb > 0.01)) return rb > 0.01 ? 1 : -1;
+          if(ra > 0.01 || rb > 0.01) return rb - ra;      // chi ne ha di più
+          // 2) a parità, chi ha finora meno straordinari
+          const oa = (worked[a.id]||0) - empMaxH(a), ob = (worked[b.id]||0) - empMaxH(b);
           if(Math.abs(oa - ob) > 0.01) return oa - ob;
           const ga = (A[a.id][dayKey]||[]).length ? 0 : 1;
           const gb = (A[b.id][dayKey]||[]).length ? 0 : 1;
@@ -1632,6 +1635,94 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
         }
       });
     });
+  }
+
+  /* ═══ 12. OTTIMIZZAZIONE — MENO STRAORDINARI POSSIBILE ═════════════
+     Ultima fase, puramente migliorativa: si tolgono le ore oltre
+     contratto che non servono a nessuna regola. Ogni riduzione viene
+     applicata solo se, ricontrollata la giornata, TUTTE le regole
+     restano rispettate (copertura minima, profumeria su tutto l'orario,
+     chiusura presidiata, camion dalle 07:00, nessuna giornata vuota,
+     turno minimo di 2h). In caso contrario si annulla.              */
+  const oreTotali = id => Object.keys(A[id]).reduce((t,k) =>
+    t + (A[id][k]||[]).reduce((x,b) => x + (b.e-b.s)/60, 0), 0);
+
+  const regoleOkGiorno = dayKey => {
+    const sh = S.storeHours[dayKey];
+    if(!sh || !sh.open) return true;
+    const fasce = fasceDelGiorno(dayKey);
+    const bloc = id => (A[id][dayKey]||[]);
+
+    // nessuna giornata lavorativa senza turno e turni non troppo corti
+    for(const e of avail){
+      const deveLavorare = dayKey !== riposo[e.id] && !assente(e, dateOf(dayKey));
+      const suoi = bloc(e.id);
+      if(suoi.some(b => b.e - b.s < MIN_FASCIA_H*60 - 0.01)) return false;
+      if(deveLavorare && !suoi.length && e.hoursType !== 'fixed' && !e.isDirectore) return false;
+    }
+    // copertura minima per fascia
+    for(const f of fasce){
+      const presenti = avail.filter(e => bloc(e.id).some(b => b.s < f.e && b.e > f.s)).length;
+      if(presenti < minPersone) return false;
+    }
+    // profumeria su tutto l'orario
+    if(esperte.length){
+      for(const f of fasce){
+        const cop = [];
+        esperte.forEach(e => bloc(e.id).forEach(b => {
+          const x = Math.max(f.s,b.s), y = Math.min(f.e,b.e);
+          if(y > x) cop.push([x,y]);
+        }));
+        cop.sort((p,q) => p[0]-q[0]);
+        let cur = f.s;
+        cop.forEach(([x,y]) => { if(x <= cur) cur = Math.max(cur,y) });
+        if(cur < f.e) return false;
+      }
+    }
+    // chiusura presidiata
+    if(abilitatiChiusura.length){
+      const fine = t2m(sh.ae), da = fine - ORE_CHIUSURA_M;
+      if(!abilitatiChiusura.some(e => bloc(e.id).some(b => b.s <= da && b.e >= fine))) return false;
+    }
+    // camion dalle 07:00
+    if(S.camionDays && S.camionDays[dayKey] && t2m(sh.ms) > t2m('07:00')){
+      if(!avail.some(e => bloc(e.id).some(b => b.s <= t2m('07:00')))) return false;
+    }
+    return true;
+  };
+
+  let ottimizzato = true, giriOtt = 0;
+  while(ottimizzato && giriOtt++ < 8){
+    ottimizzato = false;
+    flex.map(e => ({e, extra: oreTotali(e.id) - empMaxH(e)}))
+        .filter(x => empMaxH(x.e) > 0 && x.extra > 0.01)
+        .sort((a,b) => b.extra - a.extra)
+        .forEach(({e}) => {
+          const giorni = Object.keys(A[e.id]).filter(k => (A[e.id][k]||[]).length);
+          for(const k of giorni){
+            let extra = Math.round((oreTotali(e.id) - empMaxH(e)) * 60);
+            if(extra < 15) break;
+            const blocchi = A[e.id][k].slice()
+              .sort((x,y) => (y.straordinario?1:0) - (x.straordinario?1:0) || (y.e-y.s) - (x.e-x.s));
+            for(const b of blocchi){
+              extra = Math.round((oreTotali(e.id) - empMaxH(e)) * 60);
+              if(extra < 15) break;
+              const backup = {s:b.s, e:b.e};
+              // 1) prova a togliere del tutto il turno
+              const senza = A[e.id][k].filter(x => x !== b);
+              A[e.id][k] = senza;
+              if((b.e-b.s) <= extra + 0.01 && regoleOkGiorno(k)){ ottimizzato = true; continue }
+              A[e.id][k] = A[e.id][k].concat([b]).sort((x,y) => x.s - y.s);
+              // 2) prova ad accorciarlo (dall'inizio se copre la chiusura)
+              const taglio = Math.min(extra, (b.e-b.s) - MIN_FASCIA_H*60);
+              if(taglio >= 15){
+                if(b.chiusura) b.s += taglio; else b.e -= taglio;
+                if(regoleOkGiorno(k)) ottimizzato = true;
+                else { b.s = backup.s; b.e = backup.e }
+              }
+            }
+          }
+        });
   }
 
   /* ═══ 10. AREE ════════════════════════════════════════════════════ */
