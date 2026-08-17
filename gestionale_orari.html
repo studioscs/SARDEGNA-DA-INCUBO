@@ -1101,6 +1101,11 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
   - ((a.isProfumeria?2:0) + (a.canCloseStore?1:0) + (apreNegozio(a)?1:0)));
 
   ordineRiposi.forEach(emp => {
+    // Se il dipendente è già assente (ferie, permesso, assenza) in un giorno di
+    // apertura, quel giorno vale come riposo settimanale: non se ne assegna un altro,
+    // altrimenti risulterebbe con due giornate non lavorate.
+    const giornoAssente = openDays.find(k => assente(emp, dateOf(k)));
+    if(giornoAssente){ riposo[emp.id] = null; return }
     // chi NON lavora la domenica riposa di domenica
     if(sundayOpen && !sunWorkers.has(emp.id) && !assente(emp, dateOf('sun'))){
       riposo[emp.id] = 'sun';
@@ -1137,6 +1142,16 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
     const r = riposo[e.id];
     if(r && !sch.days[r].dayOff.includes(e.id)) sch.days[r].dayOff.push(e.id);
   });
+  // La domenica lavorano solo gli addetti previsti: tutti gli altri risultano non in
+  // servizio anche se il loro riposo è già assorbito da ferie o permessi — altrimenti
+  // la domenica resterebbe una casella vuota senza spiegazione.
+  if(sundayOpen){
+    avail.forEach(e => {
+      if(sunWorkers.has(e.id)) return;
+      if(lavoraFisso(e.id, 'sun')) return;
+      if(!sch.days['sun'].dayOff.includes(e.id)) sch.days['sun'].dayOff.push(e.id);
+    });
+  }
 
   /* giorni lavorativi di ciascun dipendente (R2 si applica a questi) */
   const giorniLavoro = emp => openDays.filter(k =>
@@ -1489,9 +1504,10 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
         (A[e.id][dayKey]||[]).some(b => b.s < f.e && b.e > f.s)).length;
       let guardia = 0;
       while(presentiOra() < minPersone && guardia++ < 10){
-        const disponibile = e => dayKey !== riposo[e.id] && !assente(e, dateOf(dayKey))
+        const disponibile = e => e.hoursType !== 'fixed' && !e.isDirectore
+        && dayKey !== riposo[e.id] && !assente(e, dateOf(dayKey))
           && !(A[e.id][dayKey]||[]).some(b => b.s < f.e && b.e > f.s);
-        const candidati = avail.filter(disponibile).sort((a,b) => {
+      const candidati = avail.filter(disponibile).sort((a,b) => {
           // 1) chi ha ancora ore di contratto da fare (non genera straordinario)
           const ra = empMaxH(a) > 0 ? empMaxH(a) - (worked[a.id]||0) : 0;
           const rb = empMaxH(b) > 0 ? empMaxH(b) - (worked[b.id]||0) : 0;
@@ -1679,14 +1695,15 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
 
   tagliaEccedenza();   // rilivella dopo gli spostamenti di apertura e chiusura
 
-  /* ═══ 11. PROFUMERIA SU TUTTO L'ORARIO — R4 ════════════════════════
-     Un'esperta di profumeria deve essere presente in ogni momento di
-     apertura. La fase gira per ultima, dopo il livellamento delle ore,
-     e lavora sui BUCHI di copertura: per ciascuno allunga il turno di
+  /* ═══ 11. PROFUMERIA SU TUTTO L'ORARIO — R4 (richiamabile) ═════════
+     Un'esperta dev'essere presente in ogni momento di apertura. La
+     funzione lavora sui buchi di copertura: allunga il turno di
      un'esperta adiacente oppure ne inserisce un'altra, anche in
-     staffetta quando la fascia supera le 6 ore consecutive.         */
+     staffetta quando la fascia supera le 6 ore. Viene richiamata anche
+     dopo il riequilibrio, che può spostare i turni.                  */
   const esperte = avail.filter(e => e.isProfumeria);
-  if(esperte.length){
+  const coprireProfumeria = () => {
+    if(esperte.length){
     openDays.forEach(dayKey => {
       fasceDelGiorno(dayKey).forEach(f => {
         // buchi non coperti da esperte dentro la fascia
@@ -1758,6 +1775,9 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
       });
     });
   }
+
+  };
+  coprireProfumeria();
 
   /* ═══ 12. OTTIMIZZAZIONE — MENO STRAORDINARI POSSIBILE ═════════════
      Ultima fase, puramente migliorativa: si tolgono le ore oltre
@@ -1856,6 +1876,252 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
           }
         });
   }
+
+  /* ═══ 12-ter. EQUILIBRIO — presenze distribuite sulla giornata ══════
+     Senza questa fase i turni accorciati restano tutti attaccati all'inizio
+     della fascia: la mattina affollata e le ultime ore con una persona sola.
+     Qui i turni "mobili" (non camion, non apertura, non chiusura, non orari
+     fissi) vengono fatti scorrere dentro la loro fascia scegliendo l'orario
+     che alza la copertura più bassa e livella le presenze. La durata non
+     cambia mai: cambia solo quando si lavora.                        */
+  const PASSO_M = 15;
+  openDays.forEach(dayKey => {
+    // Anche la domenica viene riequilibrata: i turni che coprono l'intera fascia
+    // restano fermi (giornata piena), mentre quelli parziali si sfalsano così le
+    // pause dei tre addetti non cadono tutte nello stesso momento.
+    const fasce = fasceDelGiorno(dayKey);
+    fasce.forEach(f => {
+      const larghezza = Math.ceil((f.e - f.s) / PASSO_M);
+      if(larghezza <= 1) return;
+      const dentro = [];
+      avail.forEach(e => (A[e.id][dayKey]||[]).forEach(b => {
+        if(b.s >= f.s && b.e <= f.e) dentro.push({emp:e, b});
+      }));
+      const mobili = dentro.filter(({emp,b}) =>
+        !b.camion && !b.apertura && !b.chiusura &&
+        emp.hoursType !== 'fixed' && !emp.isDirectore &&
+        (b.e - b.s) < (f.e - f.s));
+      if(!mobili.length) return;
+
+      // copertura di partenza: tutti i turni del giorno tranne i mobili
+      const copertura = new Array(larghezza).fill(0);
+      const contaBlocco = (arr, s0, e0, segno) => {
+        for(let i = 0; i < larghezza; i++){
+          const m = f.s + i*PASSO_M;
+          if(s0 <= m && e0 > m) arr[i] += segno;
+        }
+      };
+      avail.forEach(e => (A[e.id][dayKey]||[]).forEach(b => {
+        if(!mobili.some(x => x.b === b)) contaBlocco(copertura, b.s, b.e, 1);
+      }));
+
+      // i turni più lunghi si posizionano per primi
+      mobili.sort((x,y) => (y.b.e - y.b.s) - (x.b.e - x.b.s));
+      mobili.forEach(({emp, b}) => {
+        const durata = b.e - b.s;
+        const altri = (A[emp.id][dayKey]||[]).filter(x => x !== b);
+        let best = null;
+        for(let s0 = f.s; s0 + durata <= f.e; s0 += PASSO_M){
+          const e0 = s0 + durata;
+          if(altri.some(x => s0 < x.e && x.s < e0)) continue;               // sovrapposizione
+          if(altri.some(x => (s0 - x.e > 0 && s0 - x.e < PAUSA_M) ||
+                             (x.s - e0 > 0 && x.s - e0 < PAUSA_M))) continue; // pausa 2h
+          const prova = copertura.slice();
+          contaBlocco(prova, s0, e0, 1);
+          let minimo = Infinity, quadrati = 0;
+          prova.forEach(v => { minimo = Math.min(minimo, v); quadrati += v*v });
+          // prima si alza la copertura più bassa, poi si livellano le presenze
+          const punteggio = -minimo*10000 + quadrati;
+          if(!best || punteggio < best.punteggio) best = {s0, e0, punteggio, prova};
+        }
+        if(best && best.s0 !== b.s){
+          b.s = best.s0; b.e = best.e0;
+          copertura.splice(0, larghezza, ...best.prova);
+        } else {
+          contaBlocco(copertura, b.s, b.e, 1);
+        }
+      });
+    });
+  });
+
+  /* ═══ 12-quinquies. RIORDINO DEI TURNI (richiamabile) ═════════════
+     Unisce i turni contigui dello stesso dipendente e, se la catena
+     supera le 6 ore consecutive, ripristina la pausa spostando il
+     secondo turno più avanti (senza perdere ore) o accorciandolo.   */
+  const riordinaTurni = () => {
+    openDays.forEach(dayKey => {
+      avail.forEach(e => {
+        const lista = (A[e.id][dayKey]||[]).sort((a,b) => a.s - b.s);
+        const out = [];
+        lista.forEach(b => {
+          const prec = out[out.length-1];
+          if(prec && b.s <= prec.e){
+            const unito = {s:prec.s, e:Math.max(prec.e, b.e)};
+            ['camion','apertura','chiusura','profumeria','straordinario','oltreCapienza']
+              .forEach(f => { if(prec[f] || b[f]) unito[f] = true });
+            if(unito.e - unito.s <= MAX_CONSEC_M){ out[out.length-1] = unito; return }
+            if(prec.apertura && unito.s !== prec.s) prec.s = unito.s;
+            const durata2 = Math.min(b.e - b.s, MAX_CONSEC_M);
+            const fasce2 = fasceDelGiorno(dayKey);
+            const fascia = fasce2.find(g => b.s >= g.s && b.s < g.e) || fasce2[fasce2.length-1];
+            const limiteFine = fascia ? fascia.e : b.e;
+            const inizio2 = prec.e + PAUSA_M;
+            // un turno che presidia la chiusura mantiene la fine: si accorcia l'inizio
+            if(b.chiusura){
+              if(b.e - inizio2 >= MIN_FASCIA_H*60 && b.e - inizio2 <= MAX_CONSEC_M){ b.s = inizio2; out.push(b); return }
+              const inizioMin = Math.max(inizio2, b.e - MAX_CONSEC_M);
+              if(b.e - inizioMin >= MIN_FASCIA_H*60){ b.s = inizioMin; out.push(b); return }
+            }
+            if(inizio2 + durata2 <= limiteFine){ b.s = inizio2; b.e = inizio2 + durata2; out.push(b); return }
+            if(limiteFine - inizio2 >= MIN_FASCIA_H*60){ b.s = inizio2; b.e = limiteFine; out.push(b); return }
+            out[out.length-1] = {s:prec.s, e:Math.min(prec.s + MAX_CONSEC_M, unito.e)};
+            return;
+          }
+          out.push(b);
+        });
+        A[e.id][dayKey] = out;
+      });
+    });
+  };
+  riordinaTurni();
+
+  /* ═══ 12-sexies. ORE MANCANTI, MESSE DOVE SERVONO ══════════════════
+     Ultimo giro: chi è ancora sotto contratto riceve le ore residue, e
+     il turno viene collocato nel punto della settimana in cui ci sono
+     meno persone. Così le ore mancanti diventano copertura utile invece
+     di accumularsi dove c'è già gente.                               */
+  const coperturaIn = (dayKey, s0, e0) => {
+    let minimo = 99;
+    for(let m = s0; m < e0; m += PASSO_M){
+      const n = avail.filter(e => (A[e.id][dayKey]||[]).some(b => b.s <= m && b.e > m)).length;
+      minimo = Math.min(minimo, n);
+    }
+    return minimo === 99 ? 0 : minimo;
+  };
+
+  let giroOre = 0;
+  let ancora = true;
+  while(ancora && giroOre++ < 30){
+    ancora = false;
+    flex.map(e => ({e, mancano: empMaxH(e) - oreAssegnate(e.id)}))
+        .filter(x => x.mancano > 0.5)
+        .sort((a,b) => b.mancano - a.mancano)
+        .forEach(({e, mancano}) => {
+          const durataMax = Math.max(MIN_FASCIA_H*60, Math.min(Math.round(mancano*60), MAX_CONSEC_M));
+          let best = null;
+          // si provano durate decrescenti: meglio due turni corti che nessuna ora
+          for(let durata = durataMax; durata >= MIN_FASCIA_H*60 && !best; durata -= PASSO_M)
+          openDays.filter(k => k !== 'sun' && k !== riposo[e.id] && !assente(e, dateOf(k))).forEach(dayKey => {
+            const oreGiorno = (A[e.id][dayKey]||[]).reduce((tt,x) => tt + (x.e-x.s), 0);
+            if(oreGiorno + durata > MAX_GIORNO_M) return;      // massimo 8h al giorno
+            fasceDelGiorno(dayKey).forEach(f => {
+              for(let s0 = f.s; s0 + Math.min(durata, f.e-f.s) <= f.e; s0 += PASSO_M){
+                const e0 = s0 + Math.min(durata, f.e - f.s);
+                if(e0 - s0 < MIN_FASCIA_H*60) continue;
+                const suoi = A[e.id][dayKey] || [];
+                if(suoi.some(x => s0 < x.e && x.s < e0)) continue;
+                if(suoi.some(x => (s0 - x.e > 0 && s0 - x.e < PAUSA_M) || (x.s - e0 > 0 && x.s - e0 < PAUSA_M))) continue;
+                // niente più di 6h consecutive sommando i turni attaccati
+                const attaccatoPrima = suoi.find(x => x.e === s0);
+                const attaccatoDopo  = suoi.find(x => x.s === e0);
+                let totale = e0 - s0;
+                if(attaccatoPrima) totale += attaccatoPrima.e - attaccatoPrima.s;
+                if(attaccatoDopo)  totale += attaccatoDopo.e - attaccatoDopo.s;
+                if(totale > MAX_CONSEC_M) continue;
+                if(!entroTetto(e, (e0-s0)/60)) continue;
+                const cop = coperturaIn(dayKey, s0, e0);
+                const punteggio = cop*100 + (dayKey === 'sat' ? 1 : 0);
+                if(!best || punteggio < best.punteggio) best = {dayKey, s0, e0, punteggio};
+              }
+            });
+          });
+          if(best){
+            (A[e.id][best.dayKey] = A[e.id][best.dayKey] || []).push({s:best.s0, e:best.e0});
+            ancora = true;
+          }
+        });
+  }
+
+  riordinaTurni();   // le ore appena aggiunte non devono creare catene oltre 6h
+
+  coprireProfumeria();   // il riequilibrio può aver spostato i turni delle esperte
+  riordinaTurni();
+
+  /* ═══ 12-quater. NESSUNA FASCIA ORARIA SCOPERTA ════════════════════
+     Dopo il livellamento si controlla la copertura minuto per minuto: se
+     in qualche momento ci sono meno persone del minimo richiesto si
+     aggiunge un turno (in straordinario se il contratto è già pieno).  */
+  const minutiScoperti = dayKey => {
+    const sh0 = S.storeHours[dayKey];
+    if(!sh0 || !sh0.open) return [];
+    const buchi = [];
+    fasceDelGiorno(dayKey).forEach(f => {
+      let inizio = null;
+      for(let m = f.s; m < f.e; m += PASSO_M){
+        const n = avail.filter(e => (A[e.id][dayKey]||[]).some(b => b.s <= m && b.e > m)).length;
+        if(n < minPersone){ if(inizio === null) inizio = m }
+        else if(inizio !== null){ buchi.push({s:inizio, e:m, f}); inizio = null }
+      }
+      if(inizio !== null) buchi.push({s:inizio, e:f.e, f});
+    });
+    return buchi;
+  };
+
+  openDays.forEach(dayKey => {
+    let giro = 0;
+    const irrisolvibili = new Set();
+    while(giro++ < 20){
+      const buchi = minutiScoperti(dayKey).filter(x => !irrisolvibili.has(x.s+'-'+x.e));
+      if(!buchi.length) break;
+      const {s:gs, e:ge, f} = buchi[0];
+      const chiave = gs+'-'+ge;
+      const durata = Math.max(ge - gs, MIN_FASCIA_H*60);
+      const inizio = Math.min(gs, Math.max(f.s, f.e - durata));
+      const fine = Math.min(f.e, inizio + Math.max(durata, MIN_FASCIA_H*60));
+      // 1) allunga un turno che confina col buco: non aggiunge persone in campo
+      let allungato = false;
+      for(const e of avail){
+        if(e.hoursType === 'fixed' || e.isDirectore) continue;
+        if(dayKey === riposo[e.id] || assente(e, dateOf(dayKey))) continue;
+        const suoi = (A[e.id][dayKey]||[]).sort((x,y) => x.s - y.s);
+        const prima = suoi.find(x => x.e === gs);
+        const dopo  = suoi.find(x => x.s === ge);
+        if(prima && (ge - prima.s) <= MAX_CONSEC_M && entroTetto(e,(ge-gs)/60)
+           && !suoi.some(x => x !== prima && x.s < ge && gs < x.e)){
+          prima.e = ge; allungato = true; break;
+        }
+        if(dopo && (dopo.e - gs) <= MAX_CONSEC_M && entroTetto(e,(ge-gs)/60)
+           && !suoi.some(x => x !== dopo && x.s < ge && gs < x.e)){
+          dopo.s = gs; allungato = true; break;
+        }
+      }
+      if(allungato) continue;
+
+
+      const disponibile = e => e.hoursType !== 'fixed' && !e.isDirectore
+        && dayKey !== riposo[e.id] && !assente(e, dateOf(dayKey))
+        && !(A[e.id][dayKey]||[]).some(x => x.s < fine && inizio < x.e)
+        && !(A[e.id][dayKey]||[]).some(x => (inizio - x.e > 0 && inizio - x.e < PAUSA_M) ||
+                                            (x.s - fine > 0 && x.s - fine < PAUSA_M))
+        && entroTetto(e, (fine-inizio)/60);
+      const candidati = avail.filter(disponibile).sort((a,b) => {
+        const ra = empMaxH(a) > 0 ? empMaxH(a) - oreAssegnate(a.id) : 0;
+        const rb = empMaxH(b) > 0 ? empMaxH(b) - oreAssegnate(b.id) : 0;
+        if((ra > 0.01) !== (rb > 0.01)) return rb > 0.01 ? 1 : -1;
+        return rb - ra;
+      });
+      if(!candidati.length){
+        warnings.push(`🕳 ${nomeGiorno(dayKey)} (${weekRange(weekStartISO)}) ${m2t(gs)}–${m2t(ge)}: coperta da meno di ${minPersone} persone e nessun dipendente disponibile.`);
+        irrisolvibili.add(chiave);   // si passa al buco successivo, non ci si ferma
+        continue;
+      }
+      const scelto = candidati[0];
+      const oltre = empMaxH(scelto) > 0 && oreAssegnate(scelto.id) >= empMaxH(scelto) - 0.01;
+      (A[scelto.id][dayKey] = A[scelto.id][dayKey] || []).push({s:inizio, e:fine, straordinario: oltre || undefined});
+    }
+  });
+
+  riordinaTurni();   // ultimo assestamento dopo le coperture
 
   /* ═══ 10. AREE ════════════════════════════════════════════════════ */
   const nonMag = S.areas.filter(a => !isMagazzino(a));
