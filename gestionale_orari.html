@@ -1331,7 +1331,35 @@ function generateWeekSchedule(weekStartISO, warnings, restHistory={}, weekIndex=
   [...fissi, ...direttori].forEach(emp => {
     Object.keys(turniFissi[emp.id] || {}).forEach(k => {
       if(k === riposo[emp.id]) return;               // mai turni nel riposo
-      A[emp.id][k] = (turniFissi[emp.id][k] || []).map(t => ({s:t.s, e:t.e, areaId:t.areaId}));
+      const shd = S.storeHours[k];
+      const fasceK = shd.type === 'split'
+        ? [[t2m(shd.ms), t2m(shd.me)], [t2m(shd.as), t2m(shd.ae)]]
+        : [[t2m(shd.ms), t2m(shd.ae)]];
+      const adattati = [];
+      (turniFissi[emp.id][k] || []).forEach(t => {
+        // Il turno fisso viene riportato dentro l'orario di apertura del negozio:
+        // si sceglie la fascia con cui si sovrappone di più e si taglia su di essa.
+        // Fa eccezione l'ingresso camion delle 07:00.
+        if(t.s <= t2m('07:00')){ adattati.push({s:t.s, e:t.e, areaId:t.areaId}); return }
+        let best = null;
+        fasceK.forEach(([fs,fe]) => {
+          const ov = Math.min(t.e,fe) - Math.max(t.s,fs);
+          if(ov > 0 && (!best || ov > best.ov)) best = {fs, fe, ov};
+        });
+        if(!best){
+          warnings.push(`⏰ ${nomeGiorno(k)} (${weekRange(weekStartISO)}): il turno fisso di ${emp.name} (${m2t(t.s)}–${m2t(t.e)}) è fuori dall'orario di apertura e non è stato inserito.`);
+          return;
+        }
+        const ns = Math.max(t.s, best.fs), ne = Math.min(t.e, best.fe);
+        if(ne - ns < 30){
+          warnings.push(`⏰ ${nomeGiorno(k)} (${weekRange(weekStartISO)}): il turno fisso di ${emp.name} (${m2t(t.s)}–${m2t(t.e)}) non rientra nell'orario di apertura e non è stato inserito.`);
+          return;
+        }
+        if(ns !== t.s || ne !== t.e)
+          warnings.push(`⏰ ${nomeGiorno(k)} (${weekRange(weekStartISO)}): turno fisso di ${emp.name} adattato all'orario del negozio: ${m2t(t.s)}–${m2t(t.e)} → ${m2t(ns)}–${m2t(ne)}.`);
+        adattati.push({s:ns, e:ne, areaId:t.areaId});
+      });
+      A[emp.id][k] = adattati;
     });
   });
 
@@ -2118,6 +2146,30 @@ function eseguiControlli(sch){
     ok:!chiusure.some(r=>r.includes('nessun addetto')), neutro:!abilitati.length,
     righe:abilitati.length?chiusure:['Nessun dipendente è segnato come abilitato alla chiusura.']});
 
+  /* 6 — ORARI DI APERTURA RISPETTATI */
+  const fuoriOrario=[];
+  openDays.forEach(k=>{
+    const sh=S.storeHours[k];
+    const fasce=fasceGiorno(k);
+    (sch.days[k].shifts||[]).forEach(s0=>{
+      const a0=t2m(s0.startTime), b0=t2m(s0.endTime);
+      const dentro=fasce.some(([x,y])=>a0>=x&&b0<=y);
+      const camion=a0<=t2m('07:00')&&b0<=Math.max(...fasce.map(f=>f[1]));
+      if(!dentro&&!camion){
+        const e=getEmp(s0.employeeId);
+        fuoriOrario.push(`<strong>${nome(k)}</strong> ${esc(e?e.name:'?')} ${s0.startTime}–${s0.endTime} — <span style="color:#C0392B">fuori dall'orario di apertura (${fasce.map(([x,y])=>m2t(x)+'–'+m2t(y)).join(' / ')})</span>`);
+      }
+    });
+  });
+  // turni assegnati in giorni di chiusura
+  DAYS_KEY.filter(k=>sch.days[k]&&!openDays.includes(k)).forEach(k=>{
+    const n=(sch.days[k].shifts||[]).length;
+    if(n)fuoriOrario.push(`<strong>${nome(k)}</strong>: ${n} turni assegnati ma il negozio è <span style="color:#C0392B">chiuso</span>`);
+  });
+  controlli.push({titolo:'6. Turni dentro l\'orario di apertura',ok:!fuoriOrario.length,
+    righe:fuoriOrario.length?fuoriOrario
+      :['Tutti i turni rientrano nelle fasce di apertura impostate (l\'ingresso camion delle 07:00 è ammesso).']});
+
   return controlli;
 }
 
@@ -2613,11 +2665,22 @@ function saveShiftEdit(empId,dayKey,weekIdx,dayDate){
   }
   else{
     const s=document.getElementById('eStart').value,e=document.getElementById('eEnd').value,a=document.getElementById('eArea').value;
+    // il turno deve rientrare nell'orario di apertura del negozio (07:00 = camion)
+    const shOra=S.storeHours[dayKey];
+    const fasceOra=shOra&&shOra.open
+      ? (shOra.type==='split'?[[t2m(shOra.ms),t2m(shOra.me)],[t2m(shOra.as),t2m(shOra.ae)]]:[[t2m(shOra.ms),t2m(shOra.ae)]])
+      : [];
+    const dentroOrario=(x,y)=>fasceOra.some(([p,q])=>t2m(x)>=p&&t2m(y)<=q)||x==='07:00';
+    if(s&&e&&t2m(e)>t2m(s)&&!dentroOrario(s,e)){
+      toast(`⏰ ${s}–${e} è fuori dall'orario di apertura (${fasceOra.map(([p,q])=>m2t(p)+'–'+m2t(q)).join(' / ')||'negozio chiuso'})`);
+      return;
+    }
     if(s&&e&&t2m(e)>t2m(s))dd.shifts.push({employeeId:empId,startTime:s,endTime:e,areaId:a,hours:shiftH(s,e)});
     if(document.getElementById('eSecondShift')&&document.getElementById('eSecondShift').checked){
       const s2=document.getElementById('eStart2').value,e2=document.getElementById('eEnd2').value,a2=document.getElementById('eArea2').value;
       if(s2&&e2&&t2m(e2)>t2m(s2)){
         if(s&&e&&t2m(s2)<t2m(e)){toast('⚠️ Il secondo turno si sovrappone al primo');return}
+        if(!dentroOrario(s2,e2)){toast(`⏰ ${s2}–${e2} è fuori dall'orario di apertura`);return}
         dd.shifts.push({employeeId:empId,startTime:s2,endTime:e2,areaId:a2,hours:shiftH(s2,e2)});
       }
     }
